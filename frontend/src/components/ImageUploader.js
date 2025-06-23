@@ -165,7 +165,7 @@ const ImageUploader = () => {
             </div>
             <a
               href={stats.downloadUrl}
-              download={`compressed-image.${format}`}
+              download={`compressed-${selectedFile.name.split('.')[0]}.${format}`}
               className="download-button"
             >
               Download Compressed Image
