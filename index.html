@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyPixo - Image Optimizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <h1 class="text-xl font-bold text-blue-400">TinyPixo</h1>
+            <button class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Download
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-4">
+        <!-- Upload Area -->
+        <div id="upload-area" class="border-2 border-dashed border-gray-600 rounded-xl p-8 text-center mb-6 hover:border-blue-500 transition-colors cursor-pointer">
+            <div class="space-y-4">
+                <div class="text-6xl">📸</div>
+                <div>
+                    <p class="text-lg font-medium">Drop an image here or click to select</p>
+                    <p class="text-gray-400 text-sm mt-1">Supports JPEG, PNG, WebP, AVIF</p>
+                </div>
+                <input type="file" id="file-input" class="hidden" accept="image/*">
+            </div>
+        </div>
+
+        <!-- Comparison View -->
+        <div id="comparison-view" class="hidden">
+            <!-- Image Comparison -->
+            <div class="grid lg:grid-cols-2 gap-6 mb-6">
+                <!-- Original -->
+                <div class="bg-gray-800 rounded-xl overflow-hidden">
+                    <div class="bg-gray-700 px-4 py-2 flex justify-between items-center">
+                        <span class="font-medium">Original</span>
+                        <span id="original-size" class="text-sm text-gray-300">0 KB</span>
+                    </div>
+                    <div class="aspect-square bg-gray-900 flex items-center justify-center">
+                        <img id="original-img" class="max-w-full max-h-full object-contain" alt="Original">
+                    </div>
+                </div>
+
+                <!-- Optimized -->
+                <div class="bg-gray-800 rounded-xl overflow-hidden">
+                    <div class="bg-gray-700 px-4 py-2 flex justify-between items-center">
+                        <span class="font-medium">Optimized</span>
+                        <span id="optimized-size" class="text-sm text-green-400">0 KB</span>
+                    </div>
+                    <div class="aspect-square bg-gray-900 flex items-center justify-center">
+                        <img id="optimized-img" class="max-w-full max-h-full object-contain" alt="Optimized">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls Panel -->
+            <div class="grid lg:grid-cols-3 gap-6">
+                <!-- Format Selection -->
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <h3 class="font-medium mb-3">Format</h3>
+                    <div class="space-y-2">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="format" value="webp" class="text-blue-600" checked>
+                            <span>WebP</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="format" value="avif" class="text-blue-600">
+                            <span>AVIF</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="format" value="jpeg" class="text-blue-600">
+                            <span>JPEG</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="format" value="png" class="text-blue-600">
+                            <span>PNG</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Quality Control -->
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <h3 class="font-medium mb-3">Quality</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between text-sm">
+                            <span>Quality</span>
+                            <span id="quality-value">80%</span>
+                        </div>
+                        <input type="range" id="quality-slider" min="1" max="100" value="80" 
+                               class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                </div>
+
+                <!-- Resize Options -->
+                <div class="bg-gray-800 rounded-xl p-4">
+                    <h3 class="font-medium mb-3">Resize</h3>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="number" id="width-input" placeholder="Width" 
+                                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                            <input type="number" id="height-input" placeholder="Height" 
+                                   class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" id="maintain-aspect" class="text-blue-600" checked>
+                            <span class="text-sm">Maintain aspect ratio</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="mt-6 bg-gray-800 rounded-xl p-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-red-400" id="original-size-stat">0 KB</div>
+                        <div class="text-sm text-gray-400">Original</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-400" id="compressed-size-stat">0 KB</div>
+                        <div class="text-sm text-gray-400">Compressed</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-blue-400" id="savings-stat">0%</div>
+                        <div class="text-sm text-gray-400">Saved</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-purple-400" id="ratio-stat">0:1</div>
+                        <div class="text-sm text-gray-400">Ratio</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <style>
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+        }
+        .slider::-moz-range-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+
+    <script>
+        // Basic UI interactions
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const comparisonView = document.getElementById('comparison-view');
+        const qualitySlider = document.getElementById('quality-slider');
+        const qualityValue = document.getElementById('quality-value');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                uploadArea.classList.add('hidden');
+                comparisonView.classList.remove('hidden');
+                // Image processing would go here
+            }
+        });
+
+        qualitySlider.addEventListener('input', (e) => {
+            qualityValue.textContent = e.target.value + '%';
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('border-blue-500');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('border-blue-500');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('border-blue-500');
+            const files = e.dataTransfer.files;
+            if (files[0]) {
+                uploadArea.classList.add('hidden');
+                comparisonView.classList.remove('hidden');
+                // Image processing would go here
+            }
+        });
+    </script>
+</body>
+</html>
