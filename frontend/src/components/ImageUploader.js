@@ -67,8 +67,10 @@ const ImageUploader = () => {
       );
 
       // Get compression stats from headers
-      const originalSize = response.headers['x-original-size'];
-      const compressedSize = response.headers['x-compressed-size'];
+      console.log('Response headers:', response.headers);
+      const originalSize = parseInt(response.headers['x-original-size']);
+      const compressedSize = parseInt(response.headers['x-compressed-size']);
+      console.log('Sizes:', { originalSize, compressedSize });
       
       // Create download URL
       const url = window.URL.createObjectURL(new Blob([response.data]));
