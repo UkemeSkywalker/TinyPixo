@@ -80,6 +80,17 @@ export default function Home() {
     setBatchFiles(null)
   }
 
+  const handlePercentageResize = (percentage: number) => {
+    // For batch processing, we'll use a fixed base size since we don't have individual dimensions
+    // This is a simplified approach - in production you might want to get dimensions for each file
+    const baseWidth = 1920
+    const baseHeight = 1080
+    const newWidth = Math.round(baseWidth * (percentage / 100))
+    const newHeight = Math.round(baseHeight * (percentage / 100))
+    setWidth(newWidth)
+    setHeight(newHeight)
+  }
+
   const handleDownload = () => {
     if (optimizedImage) {
       const nameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '')
@@ -111,6 +122,7 @@ export default function Home() {
             onBack={handleBackFromBatch}
             onFormatChange={setFormat}
             onQualityChange={setQuality}
+            onPercentageResize={handlePercentageResize}
           />
         ) : !originalImage ? (
           <ImageUpload 
