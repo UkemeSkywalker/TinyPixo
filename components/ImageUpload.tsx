@@ -2,9 +2,10 @@ import { useRef } from 'react'
 
 interface ImageUploadProps {
   onImageUpload: (file: File) => void
+  onBatchUpload: (files: File[]) => void
 }
 
-export default function ImageUpload({ onImageUpload }: ImageUploadProps) {
+export default function ImageUpload({ onImageUpload, onBatchUpload }: ImageUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleClick = () => {
@@ -12,17 +13,21 @@ export default function ImageUpload({ onImageUpload }: ImageUploadProps) {
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      onImageUpload(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length === 1) {
+      onImageUpload(files[0])
+    } else if (files.length > 1) {
+      onBatchUpload(files)
     }
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (file) {
-      onImageUpload(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 1) {
+      onImageUpload(files[0])
+    } else if (files.length > 1) {
+      onBatchUpload(files)
     }
   }
 
@@ -40,14 +45,15 @@ export default function ImageUpload({ onImageUpload }: ImageUploadProps) {
       <div className="space-y-4">
         <div className="text-6xl">📸</div>
         <div>
-          <p className="text-lg font-medium">Drop an image here or click to select</p>
-          <p className="text-gray-400 text-sm mt-1">Supports JPEG, PNG, WebP, AVIF</p>
+          <p className="text-lg font-medium">Drop images here or click to select</p>
+          <p className="text-gray-400 text-sm mt-1">Single image or multiple for batch processing</p>
         </div>
         <input 
           ref={fileInputRef}
           type="file" 
           className="hidden" 
           accept="image/*"
+          multiple
           onChange={handleFileChange}
         />
       </div>

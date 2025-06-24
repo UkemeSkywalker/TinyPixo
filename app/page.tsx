@@ -4,6 +4,7 @@ import { useState } from 'react'
 import ImageUpload from '../components/ImageUpload'
 import ImageComparison from '../components/ImageComparison'
 import ControlPanel from '../components/ControlPanel'
+import BatchProcessor from '../components/BatchProcessor'
 
 export default function Home() {
   const [originalImage, setOriginalImage] = useState<string | null>(null)
@@ -17,6 +18,7 @@ export default function Home() {
   const [maintainAspect, setMaintainAspect] = useState<boolean>(true)
   const [originalFilename, setOriginalFilename] = useState<string>('')
   const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null)
+  const [batchFiles, setBatchFiles] = useState<File[] | null>(null)
 
   const processImage = async (file?: File) => {
     if (!originalImage && !file) return
@@ -57,6 +59,7 @@ export default function Home() {
     setOriginalImage(url)
     setOriginalSize(file.size)
     setOriginalFilename(file.name)
+    setBatchFiles(null)
     
     // Get image dimensions
     const img = new Image()
@@ -66,6 +69,15 @@ export default function Home() {
     img.src = url
     
     await processImage(file)
+  }
+
+  const handleBatchUpload = (files: File[]) => {
+    setBatchFiles(files)
+    setOriginalImage(null)
+  }
+
+  const handleBackFromBatch = () => {
+    setBatchFiles(null)
   }
 
   const handleDownload = () => {
@@ -89,8 +101,22 @@ export default function Home() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto p-4">
-        {!originalImage ? (
-          <ImageUpload onImageUpload={handleImageUpload} />
+        {batchFiles ? (
+          <BatchProcessor 
+            files={batchFiles}
+            format={format}
+            quality={quality}
+            width={width}
+            height={height}
+            onBack={handleBackFromBatch}
+            onFormatChange={setFormat}
+            onQualityChange={setQuality}
+          />
+        ) : !originalImage ? (
+          <ImageUpload 
+            onImageUpload={handleImageUpload}
+            onBatchUpload={handleBatchUpload}
+          />
         ) : (
           <>
             <ImageComparison 
