@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface BatchFile {
   file: File
@@ -17,9 +17,10 @@ interface BatchProcessorProps {
   onBack: () => void
   onFormatChange: (format: string) => void
   onQualityChange: (quality: number) => void
+  onPercentageResize?: (percentage: number) => void
 }
 
-export default function BatchProcessor({ files, format, quality, width, height, onBack, onFormatChange, onQualityChange }: BatchProcessorProps) {
+export default function BatchProcessor({ files, format, quality, width, height, onBack, onFormatChange, onQualityChange, onPercentageResize }: BatchProcessorProps) {
   const [batchFiles, setBatchFiles] = useState<BatchFile[]>(
     files.map(file => ({
       file,
@@ -29,11 +30,15 @@ export default function BatchProcessor({ files, format, quality, width, height, 
     }))
   )
   const [isProcessing, setIsProcessing] = useState(false)
+  const shouldStopRef = useRef(false)
 
   const processAllFiles = async () => {
     setIsProcessing(true)
+    shouldStopRef.current = false
     
     for (let i = 0; i < batchFiles.length; i++) {
+      if (shouldStopRef.current) break
+      
       setBatchFiles(prev => prev.map((bf, idx) => 
         idx === i ? { ...bf, status: 'processing' } : bf
       ))
@@ -76,6 +81,11 @@ export default function BatchProcessor({ files, format, quality, width, height, 
     setIsProcessing(false)
   }
 
+  const stopProcessing = () => {
+    shouldStopRef.current = true
+    setIsProcessing(false)
+  }
+
   const downloadAll = () => {
     batchFiles.forEach((bf) => {
       if (bf.optimizedBlob) {
@@ -115,7 +125,7 @@ export default function BatchProcessor({ files, format, quality, width, height, 
       </div>
 
       {/* Settings */}
-      <div className="grid md:grid-cols-2 gap-6 bg-gray-800 rounded-xl p-4">
+      <div className="grid md:grid-cols-3 gap-6 bg-gray-800 rounded-xl p-4">
         <div>
           <h3 className="font-medium mb-3">Format</h3>
           <div className="flex gap-4">
@@ -145,6 +155,24 @@ export default function BatchProcessor({ files, format, quality, width, height, 
             className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
           />
         </div>
+        <div>
+          <h3 className="font-medium mb-3">Resize</h3>
+          <select 
+            onChange={(e) => {
+              const percentage = Number(e.target.value)
+              if (percentage && onPercentageResize) {
+                onPercentageResize(percentage)
+              }
+            }}
+            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
+            defaultValue=""
+          >
+            <option value="">Original size</option>
+            {[10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100].map((percent) => (
+              <option key={percent} value={percent}>{percent}%</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Controls */}
@@ -156,6 +184,15 @@ export default function BatchProcessor({ files, format, quality, width, height, 
         >
           {isProcessing ? 'Processing...' : 'Start Processing'}
         </button>
+        
+        {isProcessing && (
+          <button
+            onClick={stopProcessing}
+            className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-medium"
+          >
+            Stop
+          </button>
+        )}
         
         {completedFiles > 0 && (
           <button
