@@ -9,6 +9,7 @@ interface ControlPanelProps {
   onWidthChange: (width: number | undefined) => void
   onHeightChange: (height: number | undefined) => void
   onMaintainAspectChange: (maintain: boolean) => void
+  onPercentageResize: (percentage: number) => void
 }
 
 export default function ControlPanel({
@@ -21,8 +22,16 @@ export default function ControlPanel({
   onQualityChange,
   onWidthChange,
   onHeightChange,
-  onMaintainAspectChange
+  onMaintainAspectChange,
+  onPercentageResize
 }: ControlPanelProps) {
+  const percentageOptions = [10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100]
+
+  const handleReset = () => {
+    onWidthChange(undefined)
+    onHeightChange(undefined)
+  }
+
   return (
     <div className="grid lg:grid-cols-3 gap-6">
       {/* Format Selection */}
@@ -68,6 +77,16 @@ export default function ControlPanel({
       <div className="bg-gray-800 rounded-xl p-4">
         <h3 className="font-medium mb-3">Resize</h3>
         <div className="space-y-3">
+          <select 
+            onChange={(e) => onPercentageResize(Number(e.target.value))}
+            className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
+            defaultValue=""
+          >
+            <option value="">Resize by %</option>
+            {percentageOptions.map((percent) => (
+              <option key={percent} value={percent}>{percent}%</option>
+            ))}
+          </select>
           <div className="grid grid-cols-2 gap-2">
             <input 
               type="number" 
@@ -84,15 +103,23 @@ export default function ControlPanel({
               className="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
             />
           </div>
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={maintainAspect}
-              onChange={(e) => onMaintainAspectChange(e.target.checked)}
-              className="text-blue-600" 
-            />
-            <span className="text-sm">Maintain aspect ratio</span>
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={maintainAspect}
+                onChange={(e) => onMaintainAspectChange(e.target.checked)}
+                className="text-blue-600" 
+              />
+              <span className="text-sm">Maintain aspect ratio</span>
+            </label>
+            <button
+              onClick={handleReset}
+              className="text-xs text-blue-400 hover:text-blue-300 underline"
+            >
+              Reset
+            </button>
+          </div>
         </div>
       </div>
     </div>
