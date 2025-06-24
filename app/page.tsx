@@ -16,6 +16,7 @@ export default function Home() {
   const [height, setHeight] = useState<number | undefined>()
   const [maintainAspect, setMaintainAspect] = useState<boolean>(true)
   const [originalFilename, setOriginalFilename] = useState<string>('')
+  const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null)
 
   const processImage = async (file?: File) => {
     if (!originalImage && !file) return
@@ -56,6 +57,14 @@ export default function Home() {
     setOriginalImage(url)
     setOriginalSize(file.size)
     setOriginalFilename(file.name)
+    
+    // Get image dimensions
+    const img = new Image()
+    img.onload = () => {
+      setOriginalDimensions({ width: img.width, height: img.height })
+    }
+    img.src = url
+    
     await processImage(file)
   }
 
@@ -113,6 +122,15 @@ export default function Home() {
                 setTimeout(() => processImage(), 100)
               }}
               onMaintainAspectChange={setMaintainAspect}
+              onPercentageResize={(percentage) => {
+                if (originalDimensions) {
+                  const newWidth = Math.round(originalDimensions.width * (percentage / 100))
+                  const newHeight = Math.round(originalDimensions.height * (percentage / 100))
+                  setWidth(newWidth)
+                  setHeight(newHeight)
+                  setTimeout(() => processImage(), 100)
+                }
+              }}
             />
             
             {/* Download Button */}
