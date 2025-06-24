@@ -15,6 +15,7 @@ export default function Home() {
   const [width, setWidth] = useState<number | undefined>()
   const [height, setHeight] = useState<number | undefined>()
   const [maintainAspect, setMaintainAspect] = useState<boolean>(true)
+  const [originalFilename, setOriginalFilename] = useState<string>('')
 
   const processImage = async (file?: File) => {
     if (!originalImage && !file) return
@@ -54,14 +55,16 @@ export default function Home() {
     const url = URL.createObjectURL(file)
     setOriginalImage(url)
     setOriginalSize(file.size)
+    setOriginalFilename(file.name)
     await processImage(file)
   }
 
   const handleDownload = () => {
     if (optimizedImage) {
+      const nameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '')
       const link = document.createElement('a')
       link.href = optimizedImage
-      link.download = `optimized.${format}`
+      link.download = `${nameWithoutExt}.${format}`
       link.click()
     }
   }
@@ -70,15 +73,8 @@ export default function Home() {
     <>
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+        <div className="max-w-7xl mx-auto">
           <h1 className="text-xl font-bold text-blue-400">TinyPixo</h1>
-          <button 
-            onClick={handleDownload}
-            disabled={!optimizedImage}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Download
-          </button>
         </div>
       </header>
 
@@ -118,6 +114,17 @@ export default function Home() {
               }}
               onMaintainAspectChange={setMaintainAspect}
             />
+            
+            {/* Download Button */}
+            <div className="mt-6 text-center">
+              <button 
+                onClick={handleDownload}
+                disabled={!optimizedImage}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-8 py-3 rounded-lg font-medium transition-colors"
+              >
+                Download Optimized Image
+              </button>
+            </div>
           </>
         )}
       </main>
