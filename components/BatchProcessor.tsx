@@ -100,6 +100,18 @@ export default function BatchProcessor({ files, format, quality, width, height, 
     })
   }
 
+  const downloadSingle = (bf: BatchFile) => {
+    if (bf.optimizedBlob) {
+      const nameWithoutExt = bf.file.name.replace(/\.[^/.]+$/, '')
+      const url = URL.createObjectURL(bf.optimizedBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${nameWithoutExt}.${format}`
+      link.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 KB'
     const k = 1024
@@ -237,12 +249,22 @@ export default function BatchProcessor({ files, format, quality, width, height, 
                 }`} />
                 <span className="text-sm font-medium truncate max-w-xs">{bf.file.name}</span>
               </div>
-              <div className="text-sm text-gray-400">
-                {formatFileSize(bf.originalSize)}
+              <div className="flex items-center gap-3">
+                <div className="text-sm text-gray-400">
+                  {formatFileSize(bf.originalSize)}
+                  {bf.status === 'completed' && (
+                    <span className="text-green-400 ml-2">
+                      → {formatFileSize(bf.optimizedSize)}
+                    </span>
+                  )}
+                </div>
                 {bf.status === 'completed' && (
-                  <span className="text-green-400 ml-2">
-                    → {formatFileSize(bf.optimizedSize)}
-                  </span>
+                  <button
+                    onClick={() => downloadSingle(bf)}
+                    className="text-blue-400 hover:text-blue-300 text-xs px-2 py-1 rounded border border-blue-400 hover:border-blue-300 transition-colors"
+                  >
+                    ↓
+                  </button>
                 )}
               </div>
             </div>
