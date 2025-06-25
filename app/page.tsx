@@ -80,6 +80,12 @@ export default function Home() {
     setBatchFiles(null)
   }
 
+  const handleBackToHome = () => {
+    setOriginalImage(null)
+    setOptimizedImage(null)
+    setBatchFiles(null)
+  }
+
   const handlePercentageResize = (percentage: number) => {
     // For batch processing, we'll use a fixed base size since we don't have individual dimensions
     // This is a simplified approach - in production you might want to get dimensions for each file
@@ -106,7 +112,12 @@ export default function Home() {
       {/* Header */}
       <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-xl font-bold text-blue-400">TinyPixo</h1>
+          <h1 
+            onClick={handleBackToHome}
+            className="text-xl font-bold text-blue-400 cursor-pointer hover:text-blue-300 transition-colors"
+          >
+            TinyPixo
+          </h1>
         </div>
       </header>
 
@@ -131,6 +142,14 @@ export default function Home() {
           />
         ) : (
           <>
+            <div className="mb-4">
+              <button 
+                onClick={handleBackToHome}
+                className="text-blue-400 hover:text-blue-300 flex items-center gap-2"
+              >
+                ← Back to Upload
+              </button>
+            </div>
             <ImageComparison 
               originalImage={originalImage}
               optimizedImage={optimizedImage}
