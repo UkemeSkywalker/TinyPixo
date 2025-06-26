@@ -107,6 +107,8 @@ export default function Home() {
     }
   }
 
+
+
   return (
     <>
       {/* Header */}
@@ -275,6 +277,34 @@ export default function Home() {
           </>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-800 border-t border-gray-700 mt-20">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="grid md:grid-cols-3 gap-8">
+            <div>
+              <h3 className="text-lg font-bold text-blue-400 mb-3">TinyPixo</h3>
+              <p className="text-gray-400 text-sm">Professional image optimization made simple. Reduce file sizes without compromising quality.</p>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-3">Features</h4>
+              <ul className="text-gray-400 text-sm space-y-1">
+                <li>• Batch Processing</li>
+                <li>• Multiple Formats</li>
+                <li>• Custom Quality Settings</li>
+                <li>• Instant Download</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-white mb-3">Privacy</h4>
+              <p className="text-gray-400 text-sm">Your images are processed locally and never stored on our servers. Complete privacy guaranteed.</p>
+            </div>
+          </div>
+          <div className="border-t border-gray-700 mt-8 pt-6 text-center text-gray-400 text-sm">
+            <p>© 2024 TinyPixo. Built for developers, designers, and content creators.</p>
+          </div>
+        </div>
+      </footer>
     </>
   )
 }
