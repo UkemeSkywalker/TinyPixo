@@ -136,10 +136,82 @@ export default function Home() {
             onPercentageResize={handlePercentageResize}
           />
         ) : !originalImage ? (
-          <ImageUpload 
-            onImageUpload={handleImageUpload}
-            onBatchUpload={handleBatchUpload}
-          />
+          <>
+            {/* Hero Section */}
+            <div className="text-center mb-12">
+              <h1 className="text-5xl font-bold text-white mb-4">
+                Optimize Images <span className="text-blue-400">Instantly</span>
+              </h1>
+              <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
+                Reduce file sizes by up to 90% without losing quality. Perfect for web, mobile, and storage optimization.
+              </p>
+            </div>
+
+            {/* Upload Section */}
+            <ImageUpload 
+              onImageUpload={handleImageUpload}
+              onBatchUpload={handleBatchUpload}
+            />
+
+            {/* Features Grid */}
+            <div className="grid md:grid-cols-3 gap-6 mt-12">
+              <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <div className="text-3xl mb-3">⚡</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Lightning Fast</h3>
+                <p className="text-gray-400">Process images in seconds with our optimized compression algorithms.</p>
+              </div>
+              <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <div className="text-3xl mb-3">🎯</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Smart Compression</h3>
+                <p className="text-gray-400">AI-powered optimization maintains visual quality while maximizing compression.</p>
+              </div>
+              <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <div className="text-3xl mb-3">📱</div>
+                <h3 className="text-lg font-semibold text-white mb-2">Multiple Formats</h3>
+                <p className="text-gray-400">Convert to WebP, JPEG, PNG with custom quality and size settings.</p>
+              </div>
+            </div>
+
+            {/* Stats Section */}
+            <div className="bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg p-8 mt-12 border border-blue-800/30">
+              <div className="grid md:grid-cols-3 gap-8 text-center">
+                <div>
+                  <div className="text-3xl font-bold text-blue-400 mb-2">90%</div>
+                  <div className="text-gray-300">Average Size Reduction</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-blue-400 mb-2">&lt;2s</div>
+                  <div className="text-gray-300">Processing Time</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-blue-400 mb-2">100%</div>
+                  <div className="text-gray-300">Privacy Protected</div>
+                </div>
+              </div>
+            </div>
+
+            {/* How It Works */}
+            <div className="mt-16">
+              <h2 className="text-3xl font-bold text-center text-white mb-8">How It Works</h2>
+              <div className="grid md:grid-cols-3 gap-8">
+                <div className="text-center">
+                  <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">1</div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Upload</h3>
+                  <p className="text-gray-400">Drag & drop your images or click to select files</p>
+                </div>
+                <div className="text-center">
+                  <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">2</div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Optimize</h3>
+                  <p className="text-gray-400">Choose format, quality, and size settings</p>
+                </div>
+                <div className="text-center">
+                  <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">3</div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Download</h3>
+                  <p className="text-gray-400">Get your optimized images instantly</p>
+                </div>
+              </div>
+            </div>
+          </>
         ) : (
           <>
             <div className="mb-4">
