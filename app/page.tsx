@@ -111,19 +111,6 @@ export default function Home() {
 
   return (
     <>
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3">
-        <div className="max-w-7xl mx-auto">
-          <h1 
-            onClick={handleBackToHome}
-            className="text-xl font-bold text-blue-400 cursor-pointer hover:text-blue-300 transition-colors"
-          >
-            TinyPixo
-          </h1>
-        </div>
-      </header>
-
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto p-4">
         {batchFiles ? (
           <BatchProcessor 
