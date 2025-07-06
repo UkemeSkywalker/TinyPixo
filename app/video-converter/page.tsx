@@ -13,6 +13,8 @@ export default function VideoConverter() {
   const [format, setFormat] = useState<string>('mp4')
   const [quality, setQuality] = useState<string>('medium')
   const [resolution, setResolution] = useState<string>('original')
+  const [bitrate, setBitrate] = useState<string>('auto')
+  const [fps, setFps] = useState<string>('original')
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
   const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
@@ -71,27 +73,45 @@ export default function VideoConverter() {
 
       const args = ['-i', inputName]
       
-      // Simpler quality settings
-      if (quality === 'high') {
-        args.push('-crf', '18')
-      } else if (quality === 'medium') {
-        args.push('-crf', '23')
+      // Quality and bitrate settings
+      if (bitrate === 'auto') {
+        if (quality === 'high') args.push('-crf', '18')
+        else if (quality === 'medium') args.push('-crf', '23')
+        else args.push('-crf', '28')
       } else {
-        args.push('-crf', '28')
+        args.push('-b:v', bitrate)
       }
+      
+      // Video filters array
+      const filters = []
       
       // Resolution scaling
       if (resolution !== 'original') {
-        if (resolution === '1080p') args.push('-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease')
-        else if (resolution === '720p') args.push('-vf', 'scale=1280:720:force_original_aspect_ratio=decrease')
-        else if (resolution === '480p') args.push('-vf', 'scale=854:480:force_original_aspect_ratio=decrease')
+        if (resolution === '1080p') filters.push('scale=1920:1080:force_original_aspect_ratio=decrease')
+        else if (resolution === '720p') filters.push('scale=1280:720:force_original_aspect_ratio=decrease')
+        else if (resolution === '480p') filters.push('scale=854:480:force_original_aspect_ratio=decrease')
+        else if (resolution === '360p') filters.push('scale=640:360:force_original_aspect_ratio=decrease')
       }
       
-      // Simpler codec settings
+      // FPS settings
+      if (fps !== 'original') {
+        filters.push(`fps=${fps}`)
+      }
+      
+      // Apply filters if any
+      if (filters.length > 0) {
+        args.push('-vf', filters.join(','))
+      }
+      
+      // Codec settings
       if (format === 'mp4') {
         args.push('-c:v', 'libx264', '-preset', 'fast')
       } else if (format === 'webm') {
-        args.push('-c:v', 'libvpx', '-b:v', '1M')
+        args.push('-c:v', 'libvpx')
+      } else if (format === 'avi') {
+        args.push('-c:v', 'libx264')
+      } else if (format === 'mov') {
+        args.push('-c:v', 'libx264')
       }
       
       args.push('-y', outputName) // -y to overwrite
@@ -180,9 +200,13 @@ export default function VideoConverter() {
             format={format}
             quality={quality}
             resolution={resolution}
+            bitrate={bitrate}
+            fps={fps}
             onFormatChange={setFormat}
             onQualityChange={setQuality}
             onResolutionChange={setResolution}
+            onBitrateChange={setBitrate}
+            onFpsChange={setFps}
             onConvert={convertVideo}
             isConverting={isConverting}
             progress={progress}
