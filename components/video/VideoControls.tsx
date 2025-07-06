@@ -49,6 +49,10 @@ export default function VideoControls({
             <option value="webm">WebM</option>
             <option value="avi">AVI</option>
             <option value="mov">MOV</option>
+            <option value="mkv">MKV</option>
+            <option value="flv">FLV</option>
+            <option value="wmv">WMV</option>
+            <option value="3gp">3GP</option>
           </select>
         </div>
 
