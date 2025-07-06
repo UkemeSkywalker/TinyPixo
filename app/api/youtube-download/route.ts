@@ -39,7 +39,12 @@ export async function POST(request: NextRequest) {
     const oembedData = await oembedResponse.json()
     console.log('oEmbed data:', oembedData)
     
-    // For now, return mock download URLs that redirect to YouTube
+    // Simple solution: provide download URLs through our server
+    const directUrls = {
+      mp4: `/api/youtube-proxy?url=${encodeURIComponent(url)}&format=mp4&title=${encodeURIComponent(oembedData.title)}`,
+      audio: `/api/youtube-proxy?url=${encodeURIComponent(url)}&format=mp3&title=${encodeURIComponent(oembedData.title)}`
+    }
+    
     return NextResponse.json({
       title: oembedData.title,
       thumbnail: oembedData.thumbnail_url,
@@ -47,12 +52,12 @@ export async function POST(request: NextRequest) {
       duration: 'Unknown',
       formats: {
         mp4: {
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          quality: 'Redirect to YouTube'
+          url: directUrls.mp4,
+          quality: 'Server Download'
         },
         audio: {
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          bitrate: 'Redirect to YouTube'
+          url: directUrls.audio,
+          bitrate: 'Server Download'
         }
       }
     })
