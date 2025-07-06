@@ -14,7 +14,8 @@
     "next": "14.0.0",
     "react": "^18",
     "react-dom": "^18",
-    "sharp": "^0.32.6"
+    "sharp": "^0.32.6",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "@types/node": "^20",
