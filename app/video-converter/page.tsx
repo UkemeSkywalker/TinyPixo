@@ -112,6 +112,14 @@ export default function VideoConverter() {
         args.push('-c:v', 'libx264')
       } else if (format === 'mov') {
         args.push('-c:v', 'libx264')
+      } else if (format === 'mkv') {
+        args.push('-c:v', 'libx264')
+      } else if (format === 'flv') {
+        args.push('-c:v', 'libx264')
+      } else if (format === 'wmv') {
+        args.push('-c:v', 'libx264')
+      } else if (format === '3gp') {
+        args.push('-c:v', 'libx264', '-s', '176x144')
       }
       
       args.push('-y', outputName) // -y to overwrite
