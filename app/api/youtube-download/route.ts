@@ -16,47 +16,50 @@ function extractVideoId(url: string): string | null {
 export async function POST(request: NextRequest) {
   try {
     const { url } = await request.json()
+    console.log('Processing URL:', url)
     
     const videoId = extractVideoId(url)
     if (!videoId) {
+      console.log('Invalid video ID')
       return NextResponse.json({ error: 'Invalid YouTube URL' }, { status: 400 })
     }
+    
+    console.log('Video ID:', videoId)
 
-    // Use YouTube's oEmbed API for basic info
     const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`
+    console.log('Fetching oEmbed:', oembedUrl)
+    
     const oembedResponse = await fetch(oembedUrl)
     
     if (!oembedResponse.ok) {
+      console.log('oEmbed failed:', oembedResponse.status)
       return NextResponse.json({ error: 'Video not found or private' }, { status: 404 })
     }
     
     const oembedData = await oembedResponse.json()
+    console.log('oEmbed data:', oembedData)
     
-    // Create download URLs (these are example formats - in reality you'd need to extract actual stream URLs)
-    const downloadUrls = {
-      mp4: `https://www.youtube.com/watch?v=${videoId}`, // Placeholder - would need actual extraction
-      audio: `https://www.youtube.com/watch?v=${videoId}` // Placeholder - would need actual extraction
-    }
-    
+    // For now, return mock download URLs that redirect to YouTube
     return NextResponse.json({
       title: oembedData.title,
       thumbnail: oembedData.thumbnail_url,
       author: oembedData.author_name,
-      duration: 'Unknown', // oEmbed doesn't provide duration
+      duration: 'Unknown',
       formats: {
         mp4: {
-          url: downloadUrls.mp4,
-          quality: 'Best Available'
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          quality: 'Redirect to YouTube'
         },
         audio: {
-          url: downloadUrls.audio,
-          bitrate: 'Best Available'
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          bitrate: 'Redirect to YouTube'
         }
-      },
-      note: 'This is a demo - actual download links would require stream URL extraction'
+      }
     })
   } catch (error) {
     console.error('API Error:', error)
-    return NextResponse.json({ error: 'Failed to get video info' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Server error: ' + (error as Error).message 
+    }, { status: 500 })
   }
 }
