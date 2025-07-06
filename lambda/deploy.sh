@@ -3,7 +3,7 @@
 # Configuration
 FUNCTION_NAME="youtube-downloader"
 REGION="us-east-1"
-ROLE_ARN="arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-execution-role"
+ROLE_ARN="arn:aws:iam::910883278292:role/lambda-youtube-downloader-role"
 
 echo "Creating and deploying Lambda function..."
 
