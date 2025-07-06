@@ -9,15 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "@ffmpeg/ffmpeg": "^0.12.7",
     "@ffmpeg/util": "^0.12.1",
     "next": "14.0.0",
-    "playwright": "^1.53.2",
     "react": "^18",
     "react-dom": "^18",
-    "sharp": "^0.32.6",
-    "youtube-dl-exec": "^3.0.22"
+    "sharp": "^0.32.6"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -17,7 +17,8 @@ export default function YouTubeDownloader() {
     setVideoInfo(null)
     
     try {
-      const response = await fetch('/api/youtube-download', {
+      // TODO: Replace with Lambda API endpoint
+      const response = await fetch('https://your-lambda-api.amazonaws.com/video-info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -28,7 +29,7 @@ export default function YouTubeDownloader() {
       const data = await response.json()
       setVideoInfo(data)
     } catch (err) {
-      setError('Failed to get video info')
+      setError('Lambda backend not yet deployed - coming soon!')
     } finally {
       setLoading(false)
     }
