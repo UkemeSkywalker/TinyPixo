@@ -2,8 +2,15 @@ import './globals.css'
 import Navigation from '../components/Navigation'
 
 export const metadata = {
-  title: 'TinyPixo - Media Optimizer',
-  description: 'Optimize images and convert audio files with ease',
+  title: 'TinyPixo - Free Image Optimizer & Video Converter',
+  description: 'Free online tool to optimize images, convert videos, and process audio files. Supports WebP, AVIF, MP4, WebM conversion with privacy-first browser processing.',
+  keywords: 'image optimizer, video converter, audio converter, WebP, AVIF, MP4, WebM, free online tool',
+  robots: 'index, follow',
+  openGraph: {
+    title: 'TinyPixo - Free Media Converter & Optimizer',
+    description: 'Convert and optimize images, videos, and audio files for free. All processing happens in your browser.',
+    type: 'website',
+  },
 }
 
 export default function RootLayout({
