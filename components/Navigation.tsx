@@ -28,6 +28,26 @@ export default function Navigation() {
       >
         🎵 Audio Converter
       </Link>
+      <Link 
+        href="/video-converter"
+        className={`px-4 py-2 rounded-lg transition-colors ${
+          pathname === '/video-converter' 
+            ? 'bg-blue-600 text-white' 
+            : 'text-gray-300 hover:text-white hover:bg-gray-700'
+        }`}
+      >
+        🎬 Video Converter
+      </Link>
+      <Link 
+        href="/youtube-downloader"
+        className={`px-4 py-2 rounded-lg transition-colors ${
+          pathname === '/youtube-downloader' 
+            ? 'bg-blue-600 text-white' 
+            : 'text-gray-300 hover:text-white hover:bg-gray-700'
+        }`}
+      >
+        📺 YouTube Downloader
+      </Link>
     </nav>
   )
 }
