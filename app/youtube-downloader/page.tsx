@@ -7,33 +7,39 @@ export default function YouTubeDownloader() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleDownload = async (format: 'mp4' | 'mp3') => {
+  const [videoInfo, setVideoInfo] = useState<any>(null)
+
+  const getVideoInfo = async () => {
     if (!url) return
     
     setLoading(true)
     setError('')
+    setVideoInfo(null)
     
     try {
       const response = await fetch('/api/youtube-download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, format })
+        body: JSON.stringify({ url })
       })
       
-      if (!response.ok) throw new Error('Download failed')
+      if (!response.ok) throw new Error('Failed to get video info')
       
-      const blob = await response.blob()
-      const downloadUrl = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = downloadUrl
-      a.download = `video.${format}`
-      a.click()
-      URL.revokeObjectURL(downloadUrl)
+      const data = await response.json()
+      setVideoInfo(data)
     } catch (err) {
-      setError('Failed to download video')
+      setError('Failed to get video info')
     } finally {
       setLoading(false)
     }
+  }
+
+  const downloadDirect = (downloadUrl: string, filename: string) => {
+    const a = document.createElement('a')
+    a.href = downloadUrl
+    a.download = filename
+    a.target = '_blank'
+    a.click()
   }
 
   return (
@@ -50,57 +56,61 @@ export default function YouTubeDownloader() {
         </div>
         
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border border-gray-700">
-          <div className="relative mb-6">
+          <div className="flex gap-4 mb-6">
             <input
               type="text"
               placeholder="Paste YouTube URL here..."
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="w-full p-4 pl-12 rounded-xl bg-gray-700/50 text-white text-lg border border-gray-600 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all"
+              className="flex-1 p-4 pl-12 rounded-xl bg-gray-700/50 text-white text-lg border border-gray-600 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all"
             />
-            <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.102m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
+            <button
+              onClick={getVideoInfo}
+              disabled={loading || !url}
+              className="px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold disabled:opacity-50"
+            >
+              {loading ? 'Loading...' : 'Get Video'}
+            </button>
           </div>
           
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
-              <p className="text-red-400 flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {error}
-              </p>
+              <p className="text-red-400">{error}</p>
             </div>
           )}
           
-          <div className="grid md:grid-cols-2 gap-4">
-            <button
-              onClick={() => handleDownload('mp4')}
-              disabled={loading || !url}
-              className="group relative overflow-hidden bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-semibold py-4 px-8 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-red-500/25"
-            >
-              <div className="flex items-center justify-center">
-                <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-                <span className="text-lg">{loading ? 'Downloading...' : 'Download MP4'}</span>
+          {videoInfo && (
+            <div className="bg-gray-700/30 rounded-lg p-6 mb-6">
+              <div className="flex gap-4 mb-4">
+                {videoInfo.thumbnail && (
+                  <img src={videoInfo.thumbnail} alt="Thumbnail" className="w-32 h-24 object-cover rounded" />
+                )}
+                <div>
+                  <h3 className="text-white font-semibold text-lg mb-2">{videoInfo.title}</h3>
+                  <p className="text-gray-300">Duration: {Math.floor(videoInfo.duration / 60)}:{(videoInfo.duration % 60).toString().padStart(2, '0')}</p>
+                </div>
               </div>
-            </button>
-            
-            <button
-              onClick={() => handleDownload('mp3')}
-              disabled={loading || !url}
-              className="group relative overflow-hidden bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold py-4 px-8 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-green-500/25"
-            >
-              <div className="flex items-center justify-center">
-                <svg className="w-6 h-6 mr-3" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-                </svg>
-                <span className="text-lg">{loading ? 'Converting...' : 'Download MP3'}</span>
+              
+              <div className="grid md:grid-cols-2 gap-4">
+                {videoInfo.formats.mp4 && (
+                  <button
+                    onClick={() => downloadDirect(videoInfo.formats.mp4.url, `${videoInfo.title}.mp4`)}
+                    className="bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+                  >
+                    Download MP4 ({videoInfo.formats.mp4.quality})
+                  </button>
+                )}
+                {videoInfo.formats.audio && (
+                  <button
+                    onClick={() => downloadDirect(videoInfo.formats.audio.url, `${videoInfo.title}.webm`)}
+                    className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition-all"
+                  >
+                    Download Audio ({videoInfo.formats.audio.bitrate}kbps)
+                  </button>
+                )}
               </div>
-            </button>
-          </div>
+            </div>
+          )}
           
           <div className="mt-8 p-4 bg-gray-700/30 rounded-lg">
             <h3 className="text-white font-semibold mb-2">How to use:</h3>
