@@ -12,7 +12,7 @@ mkdir -p package
 
 # Install dependencies
 echo "Installing dependencies..."
-pip install -r requirements.txt -t package/
+python3 -m pip install -r requirements.txt -t package/ --break-system-packages
 
 # Copy Lambda function
 cp lambda_function.py package/
