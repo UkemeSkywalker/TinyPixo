@@ -35,14 +35,41 @@ export default function VideoConverter() {
           setProgress(Math.round(progress * 100))
         })
         
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.2/dist/umd'
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        ffmpeg.on('log', ({ message }) => {
+          console.log('FFmpeg log:', message)
         })
+        
+        // Try multiple CDNs for better reliability
+        const cdnUrls = [
+          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+          'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/umd'
+        ]
+        
+        let loaded = false
+        for (const baseURL of cdnUrls) {
+          try {
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            })
+            loaded = true
+            break
+          } catch (err) {
+            console.warn(`Failed to load from ${baseURL}:`, err)
+            continue
+          }
+        }
+        
+        if (!loaded) {
+          throw new Error('All CDN sources failed to load')
+        }
         setFfmpegLoaded(true)
+        console.log('FFmpeg loaded successfully')
       } catch (error) {
         console.error('Failed to load FFmpeg:', error)
+        // Don't show alert immediately, let user try to use it first
+        setFfmpegLoaded(false)
       }
     }
     loadFFmpeg()
@@ -56,7 +83,15 @@ export default function VideoConverter() {
   }
 
   const convertVideo = async () => {
-    if (!originalFile || !ffmpegLoaded || !ffmpegRef.current) return
+    if (!originalFile) {
+      alert('Please upload a video file first.')
+      return
+    }
+    
+    if (!ffmpegLoaded || !ffmpegRef.current) {
+      alert('Video converter failed to load. This might be due to network issues. Please refresh the page and try again, or check your internet connection.')
+      return
+    }
 
     setIsConverting(true)
     setProgress(0)
@@ -65,7 +100,7 @@ export default function VideoConverter() {
     try {
       const { fetchFile } = await import('@ffmpeg/util')
       
-      const inputName = 'input.mp4'
+      const inputName = `input.${originalFile.name.split('.').pop()}`
       const outputName = `output.${format}`
 
       console.log('Writing file to FFmpeg...')
@@ -137,9 +172,10 @@ export default function VideoConverter() {
       console.log('Conversion completed successfully')
     } catch (error) {
       console.error('Conversion failed:', error)
-      alert('Conversion failed. Check console for details.')
+      alert(`Conversion failed: ${error.message || 'Unknown error'}. Please try again with a different file or format.`)
     } finally {
       setIsConverting(false)
+      setProgress(0)
     }
   }
 
