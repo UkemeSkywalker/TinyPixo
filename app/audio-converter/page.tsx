@@ -23,19 +23,46 @@ export default function AudioConverter() {
       
       try {
         const { FFmpeg } = await import('@ffmpeg/ffmpeg')
-        const { fetchFile, toBlobURL } = await import('@ffmpeg/util')
+        const { toBlobURL } = await import('@ffmpeg/util')
         
         const ffmpeg = new FFmpeg()
         ffmpegRef.current = ffmpeg
         
-        const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.2/dist/umd'
-        await ffmpeg.load({
-          coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-          wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        ffmpeg.on('log', ({ message }) => {
+          console.log('FFmpeg log:', message)
         })
+        
+        // Try multiple CDNs for better reliability
+        const cdnUrls = [
+          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+          'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/umd'
+        ]
+        
+        let loaded = false
+        for (const baseURL of cdnUrls) {
+          try {
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            })
+            loaded = true
+            break
+          } catch (err) {
+            console.warn(`Failed to load from ${baseURL}:`, err)
+            continue
+          }
+        }
+        
+        if (!loaded) {
+          throw new Error('All CDN sources failed to load')
+        }
         setFfmpegLoaded(true)
+        console.log('FFmpeg loaded successfully')
       } catch (error) {
         console.error('Failed to load FFmpeg:', error)
+        // Don't show alert immediately, let user try to use it first
+        setFfmpegLoaded(false)
       }
     }
     loadFFmpeg()
@@ -49,7 +76,10 @@ export default function AudioConverter() {
   }
 
   const convertAudio = async () => {
-    if (!originalFile || !ffmpegLoaded || !ffmpegRef.current) return
+    if (!originalFile || !ffmpegLoaded || !ffmpegRef.current) {
+      alert('Audio converter not ready. Please wait for it to load.')
+      return
+    }
 
     setIsConverting(true)
     const ffmpeg = ffmpegRef.current
@@ -60,6 +90,7 @@ export default function AudioConverter() {
       const inputName = 'input.' + originalFile.name.split('.').pop()
       const outputName = `output.${format}`
 
+      console.log('Writing audio file to FFmpeg...')
       await ffmpeg.writeFile(inputName, await fetchFile(originalFile))
 
       const args = ['-i', inputName, '-b:a', quality]
@@ -78,6 +109,7 @@ export default function AudioConverter() {
       setConvertedSize(blob.size)
     } catch (error) {
       console.error('Conversion failed:', error)
+      alert(`Conversion failed: ${error.message || 'Unknown error'}. Please try again with a different file or format.`)
     } finally {
       setIsConverting(false)
     }
