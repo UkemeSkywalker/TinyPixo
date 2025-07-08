@@ -5,6 +5,7 @@ interface AudioControlsProps {
   onQualityChange: (quality: string) => void
   onConvert: () => void
   isConverting: boolean
+  progress?: number
 }
 
 export default function AudioControls({ 
@@ -13,7 +14,8 @@ export default function AudioControls({
   onFormatChange, 
   onQualityChange, 
   onConvert,
-  isConverting 
+  isConverting,
+  progress = 0
 }: AudioControlsProps) {
   return (
     <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -58,6 +60,18 @@ export default function AudioControls({
         >
           {isConverting ? 'Converting...' : 'Convert Audio'}
         </button>
+        
+        {isConverting && (
+          <div className="mt-4">
+            <div className="bg-gray-700 rounded-full h-2 overflow-hidden">
+              <div 
+                className="bg-purple-600 h-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-sm text-gray-400 mt-2">{progress}% complete</p>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -14,6 +14,7 @@ export default function AudioConverter() {
   const [format, setFormat] = useState<string>('mp3')
   const [quality, setQuality] = useState<string>('192k')
   const [isConverting, setIsConverting] = useState<boolean>(false)
+  const [progress, setProgress] = useState<number>(0)
   const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
   const ffmpegRef = useRef<any>(null)
 
@@ -27,6 +28,10 @@ export default function AudioConverter() {
         
         const ffmpeg = new FFmpeg()
         ffmpegRef.current = ffmpeg
+        
+        ffmpeg.on('progress', ({ progress }) => {
+          setProgress(Math.round(progress * 100))
+        })
         
         ffmpeg.on('log', ({ message }) => {
           console.log('FFmpeg log:', message)
@@ -111,6 +116,7 @@ export default function AudioConverter() {
       alert(`Conversion failed: ${error.message || 'Unknown error'}. Please try again with a different file or format.`)
     } finally {
       setIsConverting(false)
+      setProgress(0)
     }
   }
 
@@ -182,6 +188,7 @@ export default function AudioConverter() {
             onQualityChange={setQuality}
             onConvert={convertAudio}
             isConverting={isConverting}
+            progress={progress}
           />
 
           <AudioPreview
