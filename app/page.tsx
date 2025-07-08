@@ -65,7 +65,7 @@ export default function Home() {
 
   const resizeImageIfNeeded = (file: File): Promise<File> => {
     return new Promise((resolve) => {
-      if (file.size <= 5 * 1024 * 1024) { // 5MB or less, no resize needed
+      if (file.size <= 10 * 1024 * 1024) { // 10MB or less, no resize needed
         resolve(file)
         return
       }

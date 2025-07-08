@@ -44,6 +44,14 @@ export default function BatchProcessor({ files, format, quality, width, height, 
       ))
 
       try {
+        // Check file size before processing
+        if (batchFiles[i].file.size > 15 * 1024 * 1024) {
+          setBatchFiles(prev => prev.map((bf, idx) => 
+            idx === i ? { ...bf, status: 'error' } : bf
+          ))
+          continue
+        }
+        
         const formData = new FormData()
         formData.append('image', batchFiles[i].file)
         formData.append('format', format)
