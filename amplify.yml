@@ -15,3 +15,8 @@ frontend:
     paths:
       - node_modules/**/*
       - .next/cache/**/*
+backend:
+  phases:
+    build:
+      commands:
+        - echo "No backend build required"

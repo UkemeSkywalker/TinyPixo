@@ -50,18 +50,62 @@ export default function Home() {
         const optimizedUrl = URL.createObjectURL(blob)
         setOptimizedImage(optimizedUrl)
         setOptimizedSize(blob.size)
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Processing failed' }))
+        console.error('Processing failed:', errorData.error)
+        alert(`Processing failed: ${errorData.error || 'Unknown error'}. Try with a smaller image.`)
       }
     } catch (error) {
       console.error('Processing failed:', error)
+      alert('Processing failed. Please try with a smaller image or check your connection.')
     } finally {
       setIsProcessing(false)
     }
   }
 
+  const resizeImageIfNeeded = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      if (file.size <= 5 * 1024 * 1024) { // 5MB or less, no resize needed
+        resolve(file)
+        return
+      }
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')!
+      const img = new Image()
+      
+      img.onload = () => {
+        // Calculate new dimensions (max 2048px on longest side)
+        const maxSize = 2048
+        let { width, height } = img
+        
+        if (width > height && width > maxSize) {
+          height = (height * maxSize) / width
+          width = maxSize
+        } else if (height > maxSize) {
+          width = (width * maxSize) / height
+          height = maxSize
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        ctx.drawImage(img, 0, 0, width, height)
+        
+        canvas.toBlob((blob) => {
+          const resizedFile = new File([blob!], file.name, { type: file.type })
+          resolve(resizedFile)
+        }, file.type, 0.8)
+      }
+      
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   const handleImageUpload = async (file: File) => {
-    const url = URL.createObjectURL(file)
+    const processedFile = await resizeImageIfNeeded(file)
+    const url = URL.createObjectURL(processedFile)
     setOriginalImage(url)
-    setOriginalSize(file.size)
+    setOriginalSize(processedFile.size)
     setOriginalFilename(file.name)
     setBatchFiles(null)
     
@@ -72,7 +116,7 @@ export default function Home() {
     }
     img.src = url
     
-    await processImage(file)
+    await processImage(processedFile)
   }
 
   const handleBatchUpload = (files: File[]) => {

@@ -14,8 +14,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
+    // Check file size limit (10MB for AWS Amplify)
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File too large. Maximum size is 10MB.' }, { status: 413 })
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer())
     let sharpInstance = sharp(buffer)
+    
+    // Set Sharp to use less memory for large images
+    sharpInstance = sharpInstance.limitInputPixels(268402689) // ~16k x 16k max
 
     // Resize if dimensions provided
     if (width || height) {
