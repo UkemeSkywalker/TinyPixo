@@ -3,6 +3,7 @@ interface ImageComparisonProps {
   optimizedImage: string | null
   originalSize: number
   optimizedSize: number
+  isProcessing?: boolean
 }
 
 const formatFileSize = (bytes: number) => {
@@ -17,7 +18,8 @@ export default function ImageComparison({
   originalImage, 
   optimizedImage, 
   originalSize, 
-  optimizedSize 
+  optimizedSize,
+  isProcessing = false
 }: ImageComparisonProps) {
   const savings = originalSize > 0 ? Math.round(((originalSize - optimizedSize) / originalSize) * 100) : 0
   const ratio = originalSize > 0 ? (originalSize / optimizedSize).toFixed(1) : '0'
@@ -44,10 +46,15 @@ export default function ImageComparison({
             <span className="text-sm text-green-400">{formatFileSize(optimizedSize)}</span>
           </div>
           <div className="aspect-square bg-gray-900 flex items-center justify-center">
-            {optimizedImage ? (
+            {optimizedImage && !isProcessing ? (
               <img src={optimizedImage} className="max-w-full max-h-full object-contain" alt="Optimized" />
             ) : (
-              <div className="text-gray-500">Processing...</div>
+              <div className="flex flex-col items-center justify-center">
+                {isProcessing && (
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mb-2"></div>
+                )}
+                <div className="text-gray-500">Processing...</div>
+              </div>
             )}
           </div>
         </div>

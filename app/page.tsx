@@ -19,10 +19,12 @@ export default function Home() {
   const [originalFilename, setOriginalFilename] = useState<string>('')
   const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null)
   const [batchFiles, setBatchFiles] = useState<File[] | null>(null)
+  const [isProcessing, setIsProcessing] = useState<boolean>(false)
 
   const processImage = async (file?: File) => {
     if (!originalImage && !file) return
     
+    setIsProcessing(true)
     try {
       const formData = new FormData()
       if (file) {
@@ -51,6 +53,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Processing failed:', error)
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -216,6 +220,7 @@ export default function Home() {
               optimizedImage={optimizedImage}
               originalSize={originalSize}
               optimizedSize={optimizedSize}
+              isProcessing={isProcessing}
             />
             <ControlPanel
               format={format}
@@ -292,6 +297,16 @@ export default function Home() {
           </div>
         </div>
       </footer>
+      
+      {/* Loading Overlay */}
+      {isProcessing && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-4"></div>
+            <p className="text-white">Processing image...</p>
+          </div>
+        </div>
+      )}
     </>
   )
 }
