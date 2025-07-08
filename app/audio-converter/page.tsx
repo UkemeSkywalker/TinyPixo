@@ -34,9 +34,8 @@ export default function AudioConverter() {
         
         // Try multiple CDNs for better reliability
         const cdnUrls = [
-          'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
           'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-          'https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/umd'
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
         ]
         
         let loaded = false
