@@ -20,14 +20,22 @@ export default function AudioConverter() {
 
   useEffect(() => {
     const loadFFmpeg = async () => {
-      if (typeof window === 'undefined') return
+      if (typeof window === 'undefined') {
+        console.log('FFmpeg: Window undefined, skipping load')
+        return
+      }
+      
+      console.log('FFmpeg: Starting load process...')
       
       try {
+        console.log('FFmpeg: Importing FFmpeg modules...')
         const { FFmpeg } = await import('@ffmpeg/ffmpeg')
         const { toBlobURL } = await import('@ffmpeg/util')
+        console.log('FFmpeg: Modules imported successfully')
         
         const ffmpeg = new FFmpeg()
         ffmpegRef.current = ffmpeg
+        console.log('FFmpeg: Instance created')
         
         ffmpeg.on('progress', ({ progress }) => {
           setProgress(Math.round(progress * 100))
@@ -44,32 +52,70 @@ export default function AudioConverter() {
         ]
         
         let loaded = false
-        for (const baseURL of cdnUrls) {
+        for (let i = 0; i < cdnUrls.length; i++) {
+          const baseURL = cdnUrls[i]
+          console.log(`FFmpeg: Attempting to load from CDN ${i + 1}/${cdnUrls.length}: ${baseURL}`)
+          
           try {
+            const coreURL = `${baseURL}/ffmpeg-core.js`
+            const wasmURL = `${baseURL}/ffmpeg-core.wasm`
+            
+            console.log(`FFmpeg: Fetching core file: ${coreURL}`)
+            const coreBlobURL = await toBlobURL(coreURL, 'text/javascript')
+            console.log('FFmpeg: Core file fetched successfully')
+            
+            console.log(`FFmpeg: Fetching WASM file: ${wasmURL}`)
+            const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
+            console.log('FFmpeg: WASM file fetched successfully')
+            
+            console.log('FFmpeg: Loading FFmpeg with blob URLs...')
             await ffmpeg.load({
-              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+              coreURL: coreBlobURL,
+              wasmURL: wasmBlobURL,
             })
+            
+            console.log(`FFmpeg: Successfully loaded from ${baseURL}`)
             loaded = true
             break
           } catch (err) {
-            console.warn(`Failed to load from ${baseURL}:`, err)
+            console.error(`FFmpeg: Failed to load from ${baseURL}:`, {
+              error: err,
+              message: err instanceof Error ? err.message : 'Unknown error',
+              stack: err instanceof Error ? err.stack : undefined
+            })
             continue
           }
         }
         
         if (!loaded) {
-          throw new Error('All CDN sources failed to load')
+          const errorMsg = 'All CDN sources failed to load'
+          console.error('FFmpeg:', errorMsg)
+          throw new Error(errorMsg)
         }
+        
         setFfmpegLoaded(true)
-        console.log('FFmpeg loaded successfully')
+        console.log('FFmpeg: Load process completed successfully')
       } catch (error) {
-        console.error('Failed to load FFmpeg:', error)
-        // Don't show alert immediately, let user try to use it first
+        console.error('FFmpeg: Critical loading error:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString()
+        })
         setFfmpegLoaded(false)
       }
     }
-    loadFFmpeg()
+    
+    // Add timeout to detect if loading is just slow
+    const timeoutId = setTimeout(() => {
+      if (!ffmpegLoaded) {
+        console.warn('FFmpeg: Loading timeout after 30 seconds')
+      }
+    }, 30000)
+    
+    loadFFmpeg().finally(() => {
+      clearTimeout(timeoutId)
+    })
   }, [])
 
   const handleAudioUpload = (file: File) => {

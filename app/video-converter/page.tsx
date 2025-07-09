@@ -39,39 +39,73 @@ export default function VideoConverter() {
           console.log('FFmpeg log:', message)
         })
         
-        // Try multiple CDNs for better reliability
         const cdnUrls = [
           'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
           'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
         ]
         
         let loaded = false
-        for (const baseURL of cdnUrls) {
+        for (let i = 0; i < cdnUrls.length; i++) {
+          const baseURL = cdnUrls[i]
+          console.log(`FFmpeg: Attempting CDN ${i + 1}/${cdnUrls.length}: ${baseURL}`)
+          
           try {
+            const coreURL = `${baseURL}/ffmpeg-core.js`
+            const wasmURL = `${baseURL}/ffmpeg-core.wasm`
+            
+            console.log(`FFmpeg: Fetching core file: ${coreURL}`)
+            const coreBlobURL = await toBlobURL(coreURL, 'text/javascript')
+            console.log('FFmpeg: Core file fetched successfully')
+            
+            console.log(`FFmpeg: Fetching WASM file: ${wasmURL}`)
+            const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
+            console.log('FFmpeg: WASM file fetched successfully')
+            
+            console.log('FFmpeg: Loading with blob URLs...')
             await ffmpeg.load({
-              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+              coreURL: coreBlobURL,
+              wasmURL: wasmBlobURL,
             })
+            
+            console.log(`FFmpeg: Success from ${baseURL}`)
             loaded = true
             break
           } catch (err) {
-            console.warn(`Failed to load from ${baseURL}:`, err)
+            console.error(`FFmpeg: Failed ${baseURL}:`, {
+              error: err,
+              message: err instanceof Error ? err.message : 'Unknown error',
+              name: err instanceof Error ? err.name : 'Unknown'
+            })
             continue
           }
         }
         
         if (!loaded) {
-          throw new Error('All CDN sources failed to load')
+          const errorMsg = 'All CDN sources failed'
+          console.error('FFmpeg:', errorMsg)
+          throw new Error(errorMsg)
         }
+        
         setFfmpegLoaded(true)
-        console.log('FFmpeg loaded successfully')
+        console.log('FFmpeg: Load completed')
       } catch (error) {
-        console.error('Failed to load FFmpeg:', error)
-        // Don't show alert immediately, let user try to use it first
+        console.error('FFmpeg: Critical error:', {
+          error,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          name: error instanceof Error ? error.name : 'Unknown',
+          timestamp: new Date().toISOString()
+        })
         setFfmpegLoaded(false)
       }
     }
-    loadFFmpeg()
+    
+    const timeoutId = setTimeout(() => {
+      if (!ffmpegLoaded) {
+        console.warn('FFmpeg: 30s timeout reached')
+      }
+    }, 30000)
+    
+    loadFFmpeg().finally(() => clearTimeout(timeoutId))
   }, [])
 
   const handleVideoUpload = (file: File) => {
