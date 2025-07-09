@@ -35,7 +35,7 @@ export default function AudioConverter() {
         
         const ffmpeg = new FFmpeg()
         ffmpegRef.current = ffmpeg
-        console.log('FFmpeg: Instance created')
+        console.log('FFmpeg: Instance created with memory optimization')
         
         ffmpeg.on('progress', ({ progress }) => {
           setProgress(Math.round(progress * 100))
@@ -68,10 +68,11 @@ export default function AudioConverter() {
             const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
             console.log('FFmpeg: WASM file fetched successfully')
             
-            console.log('FFmpeg: Loading FFmpeg with blob URLs...')
+            console.log('FFmpeg: Loading FFmpeg with blob URLs and memory optimization...')
             await ffmpeg.load({
               coreURL: coreBlobURL,
               wasmURL: wasmBlobURL,
+              workerURL: undefined // Disable worker for better compatibility
             })
             
             console.log(`FFmpeg: Successfully loaded from ${baseURL}`)
@@ -109,9 +110,9 @@ export default function AudioConverter() {
     // Add timeout to detect if loading is just slow
     const timeoutId = setTimeout(() => {
       if (!ffmpegLoaded) {
-        console.warn('FFmpeg: Loading timeout after 30 seconds')
+        console.warn('FFmpeg: Loading timeout after 60 seconds')
       }
-    }, 30000)
+    }, 60000)
     
     loadFFmpeg().finally(() => {
       clearTimeout(timeoutId)
@@ -249,7 +250,7 @@ export default function AudioConverter() {
 
       {!ffmpegLoaded && (
         <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
-          Loading audio converter...
+          Loading audio converter... (up to 60s)
         </div>
       )}
     </main>

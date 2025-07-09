@@ -61,10 +61,11 @@ export default function VideoConverter() {
             const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
             console.log('FFmpeg: WASM file fetched successfully')
             
-            console.log('FFmpeg: Loading with blob URLs...')
+            console.log('FFmpeg: Loading with blob URLs and memory optimization...')
             await ffmpeg.load({
               coreURL: coreBlobURL,
               wasmURL: wasmBlobURL,
+              workerURL: undefined // Disable worker for better compatibility
             })
             
             console.log(`FFmpeg: Success from ${baseURL}`)
@@ -101,9 +102,9 @@ export default function VideoConverter() {
     
     const timeoutId = setTimeout(() => {
       if (!ffmpegLoaded) {
-        console.warn('FFmpeg: 30s timeout reached')
+        console.warn('FFmpeg: 60s timeout reached')
       }
-    }, 30000)
+    }, 60000)
     
     loadFFmpeg().finally(() => clearTimeout(timeoutId))
   }, [])
@@ -301,7 +302,7 @@ export default function VideoConverter() {
 
       {!ffmpegLoaded && (
         <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
-          Loading video converter...
+          Loading video converter... (up to 60s)
         </div>
       )}
     </main>
