@@ -1,9 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  experimental: {
-    serverComponentsExternalPackages: ['sharp']
-  },
+  serverExternalPackages: ['sharp'],
   async headers() {
     return [
       {
@@ -30,13 +28,7 @@ const nextConfig = {
     }
     return config
   },
-  // Increase API route timeout and body size limits
-  api: {
-    bodyParser: {
-      sizeLimit: '15mb',
-    },
-    responseLimit: '15mb',
-  },
+
 }
 
 module.exports = nextConfig
