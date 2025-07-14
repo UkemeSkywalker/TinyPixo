@@ -14,10 +14,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    // Check file size limit (15MB for AWS Amplify)
-    if (file.size > 15 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File too large. Maximum size is 15MB.' }, { status: 413 })
-    }
+    // File size check removed - Docker container can handle large files
 
     const buffer = Buffer.from(await file.arrayBuffer())
     
@@ -28,14 +25,7 @@ export async function POST(request: NextRequest) {
       density: 72
     })
     
-    // Pre-resize very large images to prevent memory issues
-    const metadata = await sharpInstance.metadata()
-    if (metadata.width && metadata.height && (metadata.width > 4000 || metadata.height > 4000)) {
-      sharpInstance = sharpInstance.resize(4000, 4000, {
-        fit: 'inside',
-        withoutEnlargement: true
-      })
-    }
+    // Pre-resizing removed - Docker container has sufficient resources
 
     // Resize if dimensions provided
     if (width || height) {

@@ -15,109 +15,7 @@ export default function AudioConverter() {
   const [quality, setQuality] = useState<string>('192k')
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
-  const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
-  const ffmpegRef = useRef<any>(null)
-
-  useEffect(() => {
-    const loadFFmpeg = async () => {
-      if (typeof window === 'undefined') {
-        console.log('FFmpeg: Window undefined, skipping load')
-        return
-      }
-      
-      console.log('FFmpeg: Starting load process...')
-      
-      try {
-        console.log('FFmpeg: Importing FFmpeg modules...')
-        const { FFmpeg } = await import('@ffmpeg/ffmpeg')
-        const { toBlobURL } = await import('@ffmpeg/util')
-        console.log('FFmpeg: Modules imported successfully')
-        
-        const ffmpeg = new FFmpeg()
-        ffmpegRef.current = ffmpeg
-        console.log('FFmpeg: Instance created with memory optimization')
-        
-        ffmpeg.on('progress', ({ progress }) => {
-          setProgress(Math.round(progress * 100))
-        })
-        
-        ffmpeg.on('log', ({ message }) => {
-          console.log('FFmpeg log:', message)
-        })
-        
-        // Try multiple CDNs for better reliability
-        const cdnUrls = [
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
-        ]
-        
-        let loaded = false
-        for (let i = 0; i < cdnUrls.length; i++) {
-          const baseURL = cdnUrls[i]
-          console.log(`FFmpeg: Attempting to load from CDN ${i + 1}/${cdnUrls.length}: ${baseURL}`)
-          
-          try {
-            const coreURL = `${baseURL}/ffmpeg-core.js`
-            const wasmURL = `${baseURL}/ffmpeg-core.wasm`
-            
-            console.log(`FFmpeg: Fetching core file: ${coreURL}`)
-            const coreBlobURL = await toBlobURL(coreURL, 'text/javascript')
-            console.log('FFmpeg: Core file fetched successfully')
-            
-            console.log(`FFmpeg: Fetching WASM file: ${wasmURL}`)
-            const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
-            console.log('FFmpeg: WASM file fetched successfully')
-            
-            console.log('FFmpeg: Loading FFmpeg with blob URLs and memory optimization...')
-            await ffmpeg.load({
-              coreURL: coreBlobURL,
-              wasmURL: wasmBlobURL,
-              workerURL: undefined // Disable worker for better compatibility
-            })
-            
-            console.log(`FFmpeg: Successfully loaded from ${baseURL}`)
-            loaded = true
-            break
-          } catch (err) {
-            console.error(`FFmpeg: Failed to load from ${baseURL}:`, {
-              error: err,
-              message: err instanceof Error ? err.message : 'Unknown error',
-              stack: err instanceof Error ? err.stack : undefined
-            })
-            continue
-          }
-        }
-        
-        if (!loaded) {
-          const errorMsg = 'All CDN sources failed to load'
-          console.error('FFmpeg:', errorMsg)
-          throw new Error(errorMsg)
-        }
-        
-        setFfmpegLoaded(true)
-        console.log('FFmpeg: Load process completed successfully')
-      } catch (error) {
-        console.error('FFmpeg: Critical loading error:', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-          timestamp: new Date().toISOString()
-        })
-        setFfmpegLoaded(false)
-      }
-    }
-    
-    // Add timeout to detect if loading is just slow
-    const timeoutId = setTimeout(() => {
-      if (!ffmpegLoaded) {
-        console.warn('FFmpeg: Loading timeout after 60 seconds')
-      }
-    }, 60000)
-    
-    loadFFmpeg().finally(() => {
-      clearTimeout(timeoutId)
-    })
-  }, [])
+  // FFmpeg loading removed - now using server-side processing
 
   const handleAudioUpload = (file: File) => {
     setOriginalFile(file)
@@ -127,40 +25,37 @@ export default function AudioConverter() {
   }
 
   const convertAudio = async () => {
-    if (!originalFile || !ffmpegLoaded || !ffmpegRef.current) {
-      alert('Audio converter not ready. Please wait for it to load.')
+    if (!originalFile) {
+      alert('Please select an audio file first.')
       return
     }
 
     setIsConverting(true)
-    const ffmpeg = ffmpegRef.current
+    setProgress(0)
 
     try {
-      const { fetchFile } = await import('@ffmpeg/util')
-      
-      const inputName = 'input.' + originalFile.name.split('.').pop()
-      const outputName = `output.${format}`
+      const formData = new FormData()
+      formData.append('audio', originalFile)
+      formData.append('format', format)
+      formData.append('quality', quality)
 
-      console.log('Writing audio file to FFmpeg...')
-      await ffmpeg.writeFile(inputName, await fetchFile(originalFile))
+      const response = await fetch('/api/convert-audio', {
+        method: 'POST',
+        body: formData,
+      })
 
-      const args = ['-i', inputName, '-b:a', quality]
-      if (format === 'mp3') args.push('-codec:a', 'libmp3lame')
-      else if (format === 'aac') args.push('-codec:a', 'aac')
-      else if (format === 'ogg') args.push('-codec:a', 'libvorbis')
-      
-      args.push(outputName)
-      await ffmpeg.exec(args)
-
-      const data = await ffmpeg.readFile(outputName)
-      const blob = new Blob([data], { type: `audio/${format}` })
-      const url = URL.createObjectURL(blob)
-      
-      setConvertedUrl(url)
-      setConvertedSize(blob.size)
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        setConvertedUrl(url)
+        setConvertedSize(blob.size)
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Conversion failed' }))
+        alert(`Conversion failed: ${errorData.error}`)
+      }
     } catch (error) {
       console.error('Conversion failed:', error)
-      alert(`Conversion failed: ${error.message || 'Unknown error'}. Please try again with a different file or format.`)
+      alert('Conversion failed. Please try again.')
     } finally {
       setIsConverting(false)
       setProgress(0)
@@ -248,11 +143,7 @@ export default function AudioConverter() {
         </>
       )}
 
-      {!ffmpegLoaded && (
-        <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
-          Loading audio converter... (up to 60s)
-        </div>
-      )}
+
     </main>
   )
 }

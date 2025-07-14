@@ -17,97 +17,7 @@ export default function VideoConverter() {
   const [fps, setFps] = useState<string>('original')
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
-  const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
-  const ffmpegRef = useRef<any>(null)
-
-  useEffect(() => {
-    const loadFFmpeg = async () => {
-      if (typeof window === 'undefined') return
-      
-      try {
-        const { FFmpeg } = await import('@ffmpeg/ffmpeg')
-        const { toBlobURL } = await import('@ffmpeg/util')
-        
-        const ffmpeg = new FFmpeg()
-        ffmpegRef.current = ffmpeg
-        
-        ffmpeg.on('progress', ({ progress }) => {
-          setProgress(Math.round(progress * 100))
-        })
-        
-        ffmpeg.on('log', ({ message }) => {
-          console.log('FFmpeg log:', message)
-        })
-        
-        const cdnUrls = [
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
-        ]
-        
-        let loaded = false
-        for (let i = 0; i < cdnUrls.length; i++) {
-          const baseURL = cdnUrls[i]
-          console.log(`FFmpeg: Attempting CDN ${i + 1}/${cdnUrls.length}: ${baseURL}`)
-          
-          try {
-            const coreURL = `${baseURL}/ffmpeg-core.js`
-            const wasmURL = `${baseURL}/ffmpeg-core.wasm`
-            
-            console.log(`FFmpeg: Fetching core file: ${coreURL}`)
-            const coreBlobURL = await toBlobURL(coreURL, 'text/javascript')
-            console.log('FFmpeg: Core file fetched successfully')
-            
-            console.log(`FFmpeg: Fetching WASM file: ${wasmURL}`)
-            const wasmBlobURL = await toBlobURL(wasmURL, 'application/wasm')
-            console.log('FFmpeg: WASM file fetched successfully')
-            
-            console.log('FFmpeg: Loading with blob URLs and memory optimization...')
-            await ffmpeg.load({
-              coreURL: coreBlobURL,
-              wasmURL: wasmBlobURL,
-              workerURL: undefined // Disable worker for better compatibility
-            })
-            
-            console.log(`FFmpeg: Success from ${baseURL}`)
-            loaded = true
-            break
-          } catch (err) {
-            console.error(`FFmpeg: Failed ${baseURL}:`, {
-              error: err,
-              message: err instanceof Error ? err.message : 'Unknown error',
-              name: err instanceof Error ? err.name : 'Unknown'
-            })
-            continue
-          }
-        }
-        
-        if (!loaded) {
-          const errorMsg = 'All CDN sources failed'
-          console.error('FFmpeg:', errorMsg)
-          throw new Error(errorMsg)
-        }
-        
-        setFfmpegLoaded(true)
-        console.log('FFmpeg: Load completed')
-      } catch (error) {
-        console.error('FFmpeg: Critical error:', {
-          error,
-          message: error instanceof Error ? error.message : 'Unknown error',
-          name: error instanceof Error ? error.name : 'Unknown',
-          timestamp: new Date().toISOString()
-        })
-        setFfmpegLoaded(false)
-      }
-    }
-    
-    const timeoutId = setTimeout(() => {
-      if (!ffmpegLoaded) {
-        console.warn('FFmpeg: 60s timeout reached')
-      }
-    }, 60000)
-    
-    loadFFmpeg().finally(() => clearTimeout(timeoutId))
-  }, [])
+  // FFmpeg loading removed - now using server-side processing
 
   const handleVideoUpload = (file: File) => {
     setOriginalFile(file)
@@ -121,92 +31,36 @@ export default function VideoConverter() {
       alert('Please upload a video file first.')
       return
     }
-    
-    if (!ffmpegLoaded || !ffmpegRef.current) {
-      alert('Video converter failed to load. This might be due to network issues. Please refresh the page and try again, or check your internet connection.')
-      return
-    }
 
     setIsConverting(true)
     setProgress(0)
-    const ffmpeg = ffmpegRef.current
 
     try {
-      const { fetchFile } = await import('@ffmpeg/util')
-      
-      const inputName = `input.${originalFile.name.split('.').pop()}`
-      const outputName = `output.${format}`
+      const formData = new FormData()
+      formData.append('video', originalFile)
+      formData.append('format', format)
+      formData.append('quality', quality)
+      formData.append('resolution', resolution)
+      formData.append('bitrate', bitrate)
+      formData.append('fps', fps)
 
-      console.log('Writing file to FFmpeg...')
-      await ffmpeg.writeFile(inputName, await fetchFile(originalFile))
+      const response = await fetch('/api/convert-video', {
+        method: 'POST',
+        body: formData,
+      })
 
-      const args = ['-i', inputName]
-      
-      // Quality and bitrate settings
-      if (bitrate === 'auto') {
-        if (quality === 'high') args.push('-crf', '18')
-        else if (quality === 'medium') args.push('-crf', '23')
-        else args.push('-crf', '28')
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        setConvertedUrl(url)
+        setConvertedSize(blob.size)
       } else {
-        args.push('-b:v', bitrate)
+        const errorData = await response.json().catch(() => ({ error: 'Conversion failed' }))
+        alert(`Conversion failed: ${errorData.error}`)
       }
-      
-      // Video filters array
-      const filters = []
-      
-      // Resolution scaling
-      if (resolution !== 'original') {
-        if (resolution === '1080p') filters.push('scale=1920:1080:force_original_aspect_ratio=decrease')
-        else if (resolution === '720p') filters.push('scale=1280:720:force_original_aspect_ratio=decrease')
-        else if (resolution === '480p') filters.push('scale=854:480:force_original_aspect_ratio=decrease')
-        else if (resolution === '360p') filters.push('scale=640:360:force_original_aspect_ratio=decrease')
-      }
-      
-      // FPS settings
-      if (fps !== 'original') {
-        filters.push(`fps=${fps}`)
-      }
-      
-      // Apply filters if any
-      if (filters.length > 0) {
-        args.push('-vf', filters.join(','))
-      }
-      
-      // Codec settings
-      if (format === 'mp4') {
-        args.push('-c:v', 'libx264', '-preset', 'fast')
-      } else if (format === 'webm') {
-        args.push('-c:v', 'libvpx')
-      } else if (format === 'avi') {
-        args.push('-c:v', 'libx264')
-      } else if (format === 'mov') {
-        args.push('-c:v', 'libx264')
-      } else if (format === 'mkv') {
-        args.push('-c:v', 'libx264')
-      } else if (format === 'flv') {
-        args.push('-c:v', 'libx264')
-      } else if (format === 'wmv') {
-        args.push('-c:v', 'libx264')
-      } else if (format === '3gp') {
-        args.push('-c:v', 'libx264', '-s', '176x144')
-      }
-      
-      args.push('-y', outputName) // -y to overwrite
-      
-      console.log('FFmpeg args:', args)
-      await ffmpeg.exec(args)
-
-      console.log('Reading converted file...')
-      const data = await ffmpeg.readFile(outputName)
-      const blob = new Blob([data], { type: `video/${format}` })
-      const url = URL.createObjectURL(blob)
-      
-      setConvertedUrl(url)
-      setConvertedSize(blob.size)
-      console.log('Conversion completed successfully')
     } catch (error) {
       console.error('Conversion failed:', error)
-      alert(`Conversion failed: ${error.message || 'Unknown error'}. Please try again with a different file or format.`)
+      alert('Conversion failed. Please try again.')
     } finally {
       setIsConverting(false)
       setProgress(0)
@@ -300,11 +154,7 @@ export default function VideoConverter() {
         </>
       )}
 
-      {!ffmpegLoaded && (
-        <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
-          Loading video converter... (up to 60s)
-        </div>
-      )}
+
     </main>
   )
 }
