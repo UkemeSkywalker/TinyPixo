@@ -38,7 +38,14 @@ RUN apk add --no-cache \
     vips-cpp \
     glib \
     expat \
-    ffmpeg
+    ffmpeg && \
+    echo "FFmpeg installed at: $(which ffmpeg)" && \
+    ln -sf $(which ffmpeg) /usr/local/bin/ffmpeg && \
+    chmod +x /usr/local/bin/ffmpeg
+
+# Set FFmpeg path as environment variable
+ENV FFMPEG_PATH="/usr/local/bin/ffmpeg"
+ENV PATH="/usr/local/bin:${PATH}"
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -53,6 +60,6 @@ USER nextjs
 
 EXPOSE 3000
 ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
+ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 PORT=3000 node server.js"]
