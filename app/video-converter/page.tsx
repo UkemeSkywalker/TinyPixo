@@ -17,7 +17,62 @@ export default function VideoConverter() {
   const [fps, setFps] = useState<string>('original')
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
-  // FFmpeg loading removed - now using server-side processing
+  const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
+  const ffmpegRef = useRef<any>(null)
+
+  // Load FFmpeg WASM for local development
+  useEffect(() => {
+    // Skip FFmpeg loading in production (we use server-side FFmpeg there)
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'production') return
+    
+    const loadFFmpeg = async () => {
+      try {
+        console.log('Loading client-side FFmpeg for local development')
+        const { FFmpeg } = await import('@ffmpeg/ffmpeg')
+        const { toBlobURL } = await import('@ffmpeg/util')
+        
+        const ffmpeg = new FFmpeg()
+        ffmpegRef.current = ffmpeg
+        
+        ffmpeg.on('progress', ({ progress }) => {
+          setProgress(Math.round(progress * 100))
+        })
+        
+        // Try multiple CDNs for better reliability
+        const cdnUrls = [
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+          'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
+        ]
+        
+        let loaded = false
+        for (const baseURL of cdnUrls) {
+          try {
+            await ffmpeg.load({
+              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+            })
+            loaded = true
+            break
+          } catch (err) {
+            console.warn(`Failed to load from ${baseURL}:`, err)
+            continue
+          }
+        }
+        
+        if (!loaded) {
+          throw new Error('All CDN sources failed to load')
+        }
+        
+        setFfmpegLoaded(true)
+        console.log('FFmpeg loaded successfully for local development')
+      } catch (error) {
+        console.error('Failed to load FFmpeg:', error)
+        setFfmpegLoaded(false)
+      }
+    }
+    
+    loadFFmpeg()
+  }, [])
 
   const handleVideoUpload = (file: File) => {
     setOriginalFile(file)
@@ -35,7 +90,79 @@ export default function VideoConverter() {
     setIsConverting(true)
     setProgress(0)
 
+    // Use client-side FFmpeg in development, server-side in production
+    const isProduction = process.env.NODE_ENV === 'production' || typeof window === 'undefined'
+    const useClientFFmpeg = !isProduction && ffmpegLoaded && ffmpegRef.current
+    
+    let progressInterval = null
     try {
+      // Client-side FFmpeg for local development
+      if (useClientFFmpeg) {
+        console.log('Using client-side FFmpeg for local development')
+        const ffmpeg = ffmpegRef.current
+        const { fetchFile } = await import('@ffmpeg/util')
+        
+        const inputName = `input.${originalFile.name.split('.').pop()}`
+        const outputName = `output.${format}`
+
+        await ffmpeg.writeFile(inputName, await fetchFile(originalFile))
+
+        const args = ['-i', inputName]
+        
+        // Quality and bitrate settings
+        if (bitrate === 'auto') {
+          if (quality === 'high') args.push('-crf', '18')
+          else if (quality === 'medium') args.push('-crf', '23')
+          else args.push('-crf', '28')
+        } else {
+          args.push('-b:v', bitrate)
+        }
+        
+        // Video filters array
+        const filters = []
+        
+        // Resolution scaling
+        if (resolution !== 'original') {
+          if (resolution === '1080p') filters.push('scale=1920:1080:force_original_aspect_ratio=decrease')
+          else if (resolution === '720p') filters.push('scale=1280:720:force_original_aspect_ratio=decrease')
+          else if (resolution === '480p') filters.push('scale=854:480:force_original_aspect_ratio=decrease')
+          else if (resolution === '360p') filters.push('scale=640:360:force_original_aspect_ratio=decrease')
+        }
+        
+        // FPS settings
+        if (fps !== 'original') {
+          filters.push(`fps=${fps}`)
+        }
+        
+        // Apply filters if any
+        if (filters.length > 0) {
+          args.push('-vf', filters.join(','))
+        }
+        
+        // Codec settings
+        if (format === 'mp4') {
+          args.push('-c:v', 'libx264', '-preset', 'fast')
+        } else if (format === 'webm') {
+          args.push('-c:v', 'libvpx')
+        } else if (format === 'avi') {
+          args.push('-c:v', 'libx264')
+        }
+        
+        args.push('-y', outputName) // -y to overwrite
+        
+        await ffmpeg.exec(args)
+
+        const data = await ffmpeg.readFile(outputName)
+        const blob = new Blob([data], { type: `video/${format}` })
+        const url = URL.createObjectURL(blob)
+        
+        setConvertedUrl(url)
+        setConvertedSize(blob.size)
+        setProgress(100)
+        return
+      }
+      
+      // Server-side FFmpeg for production
       const formData = new FormData()
       formData.append('video', originalFile)
       formData.append('format', format)
@@ -48,12 +175,51 @@ export default function VideoConverter() {
         method: 'POST',
         body: formData,
       })
+      
+      // Get job ID from response headers
+      const jobId = response.headers.get('X-Job-Id')
+      
+      // Start progress polling if we have a job ID
+      if (jobId) {
+        progressInterval = setInterval(async () => {
+          try {
+            const progressResponse = await fetch(`/api/progress?jobId=${jobId}`)
+            if (progressResponse.ok) {
+              const data = await progressResponse.json()
+              setProgress(data.progress || 0)
+              
+              // If progress is 100%, stop polling
+              if (data.progress >= 100) {
+                clearInterval(progressInterval)
+                progressInterval = null
+              }
+            }
+          } catch (err) {
+            console.error('Progress fetch error:', err)
+          }
+        }, 1000)
+      }
 
       if (response.ok) {
-        const blob = await response.blob()
-        const url = URL.createObjectURL(blob)
-        setConvertedUrl(url)
-        setConvertedSize(blob.size)
+        // Check if it's a mock response (development without FFmpeg)
+        const contentType = response.headers.get('Content-Type')
+        if (contentType && contentType.includes('application/json')) {
+          const mockData = await response.json()
+          alert(`Development mode: ${mockData.message || 'FFmpeg not installed locally'}`)
+          setProgress(100)
+          // Create a small mock video file
+          const mockBlob = new Blob([new ArrayBuffer(1024)], { type: 'video/mp4' })
+          const url = URL.createObjectURL(mockBlob)
+          setConvertedUrl(url)
+          setConvertedSize(mockBlob.size)
+        } else {
+          // Normal blob response
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          setConvertedUrl(url)
+          setConvertedSize(blob.size)
+          setProgress(100) // Ensure progress shows 100% when complete
+        }
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Conversion failed' }))
         alert(`Conversion failed: ${errorData.error}`)
@@ -62,8 +228,11 @@ export default function VideoConverter() {
       console.error('Conversion failed:', error)
       alert('Conversion failed. Please try again.')
     } finally {
+      // Clean up interval if it exists
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
       setIsConverting(false)
-      setProgress(0)
     }
   }
 
@@ -154,7 +323,11 @@ export default function VideoConverter() {
         </>
       )}
 
-
+      {!(process.env.NODE_ENV === 'production') && !ffmpegLoaded && (
+        <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
+          Loading client-side FFmpeg...
+        </div>
+      )}
     </main>
   )
 }
