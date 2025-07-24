@@ -6,6 +6,18 @@ interface AudioControlsProps {
   onConvert: () => void
   isConverting: boolean
   progress?: number
+  estimatedTimeRemaining?: number | null
+  phase?: 'uploading' | 'converting'
+}
+
+// Helper function to format seconds into minutes and seconds
+function formatTime(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds} sec`
+  }
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes} min ${remainingSeconds} sec`
 }
 
 export default function AudioControls({ 
@@ -15,7 +27,9 @@ export default function AudioControls({
   onQualityChange, 
   onConvert,
   isConverting,
-  progress = 0
+  progress = 0,
+  estimatedTimeRemaining = null,
+  phase = 'converting'
 }: AudioControlsProps) {
   return (
     <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -58,7 +72,7 @@ export default function AudioControls({
           disabled={isConverting}
           className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-8 py-3 rounded-lg font-medium transition-colors"
         >
-          {isConverting ? 'Converting...' : 'Convert Audio'}
+          {isConverting ? (phase === 'uploading' ? 'Uploading...' : 'Converting...') : 'Convert Audio'}
         </button>
         
         {isConverting && (
@@ -69,10 +83,16 @@ export default function AudioControls({
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-sm text-gray-400 mt-2">{progress}% complete</p>
+            <p className="text-sm text-gray-400 mt-2">
+              {phase === 'uploading' ? 'Uploading...' : 'Converting...'} {progress}% complete
+              {phase === 'converting' && estimatedTimeRemaining !== null && progress > 0 && progress < 100 && (
+                <span> • Estimated time remaining: {formatTime(estimatedTimeRemaining)}</span>
+              )}
+            </p>
           </div>
         )}
       </div>
     </div>
   )
 }
+

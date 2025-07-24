@@ -47,6 +47,13 @@ RUN apk add --no-cache \
 ENV FFMPEG_PATH="/usr/local/bin/ffmpeg"
 ENV PATH="/usr/local/bin:${PATH}"
 
+# Set Next.js server configuration
+ENV NODE_OPTIONS="--max-http-header-size=16384"
+ENV NEXT_SHARP_PATH="/app/node_modules/sharp"
+
+# Increase body parser limit for large file uploads
+ENV BODY_SIZE_LIMIT="500mb"
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
