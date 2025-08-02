@@ -1,9 +1,13 @@
+import ProgressBar from './ProgressBar'
+
 interface ImageComparisonProps {
   originalImage: string
   optimizedImage: string | null
   originalSize: number
   optimizedSize: number
   isProcessing?: boolean
+  progress?: number
+  progressStatus?: string
 }
 
 const formatFileSize = (bytes: number) => {
@@ -19,7 +23,9 @@ export default function ImageComparison({
   optimizedImage, 
   originalSize, 
   optimizedSize,
-  isProcessing = false
+  isProcessing = false,
+  progress = 0,
+  progressStatus = "Processing..."
 }: ImageComparisonProps) {
   const savings = originalSize > 0 ? Math.round(((originalSize - optimizedSize) / originalSize) * 100) : 0
   const ratio = originalSize > 0 ? (originalSize / optimizedSize).toFixed(1) : '0'
@@ -49,11 +55,20 @@ export default function ImageComparison({
             {optimizedImage && !isProcessing ? (
               <img src={optimizedImage} className="max-w-full max-h-full object-contain" alt="Optimized" />
             ) : (
-              <div className="flex flex-col items-center justify-center">
+              <div className="flex flex-col items-center justify-center space-y-4 p-8">
                 {isProcessing && (
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mb-2"></div>
+                  <>
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                    <ProgressBar 
+                      progress={progress} 
+                      isVisible={true} 
+                      label={progressStatus}
+                    />
+                  </>
                 )}
-                <div className="text-gray-500">Processing...</div>
+                <div className="text-gray-500 text-center">
+                  {isProcessing ? progressStatus : "Processing..."}
+                </div>
               </div>
             )}
           </div>

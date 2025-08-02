@@ -17,6 +17,8 @@ export default function VideoConverter() {
   const [fps, setFps] = useState<string>('original')
   const [isConverting, setIsConverting] = useState<boolean>(false)
   const [progress, setProgress] = useState<number>(0)
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null)
+  const [phase, setPhase] = useState<'uploading' | 'converting'>('uploading')
   const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
   const ffmpegRef = useRef<any>(null)
 
@@ -89,6 +91,7 @@ export default function VideoConverter() {
 
     setIsConverting(true)
     setProgress(0)
+    setPhase('uploading')
 
     // Use client-side FFmpeg in development, server-side in production
     const isProduction = process.env.NODE_ENV === 'production' || typeof window === 'undefined'
@@ -162,22 +165,58 @@ export default function VideoConverter() {
         return
       }
       
-      // Server-side FFmpeg for production
-      const formData = new FormData()
-      formData.append('video', originalFile)
-      formData.append('format', format)
-      formData.append('quality', quality)
-      formData.append('resolution', resolution)
-      formData.append('bitrate', bitrate)
-      formData.append('fps', fps)
-
-      const response = await fetch('/api/convert-video', {
+      // Server-side FFmpeg for production - Two-step process
+      // Step 1: Upload the file
+      setProgress(1) // Show initial progress
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', originalFile)
+      uploadFormData.append('fileType', 'video')
+      
+      try {
+        console.log(`Uploading video file: ${originalFile.name}, size: ${originalFile.size} bytes`)
+        const uploadResponse = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        })
+        
+        if (!uploadResponse.ok) {
+          let errorMessage = 'Upload failed'
+          try {
+            const errorData = await uploadResponse.json()
+            errorMessage = errorData.error || errorMessage
+          } catch (e) {
+            console.error('Failed to parse error response:', e)
+          }
+          throw new Error(`Upload failed (${uploadResponse.status}): ${errorMessage}`)
+        }
+        console.log('Upload successful')
+      } catch (error) {
+        console.error('Upload error:', error)
+        throw new Error(`Upload failed: ${error.message || 'Network error'}`)
+      }
+      
+      const uploadData = await uploadResponse.json()
+      setProgress(20) // Show upload complete
+      setPhase('converting') // Switch to converting phase
+      
+      // Step 2: Process the file
+      const processResponse = await fetch('/api/convert-video/process', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: uploadData.fileName,
+          format,
+          quality,
+          resolution,
+          bitrate,
+          fps
+        }),
       })
       
       // Get job ID from response headers
-      const jobId = response.headers.get('X-Job-Id')
+      const jobId = processResponse.headers.get('X-Job-Id')
       
       // Start progress polling if we have a job ID
       if (jobId) {
@@ -186,7 +225,14 @@ export default function VideoConverter() {
             const progressResponse = await fetch(`/api/progress?jobId=${jobId}`)
             if (progressResponse.ok) {
               const data = await progressResponse.json()
-              setProgress(data.progress || 0)
+              // Scale progress to start from 20% (after upload) to 100%
+              const scaledProgress = 20 + (data.progress * 0.8)
+              setProgress(Math.round(scaledProgress))
+              
+              // Update estimated time remaining
+              if (data.estimatedTimeRemaining !== undefined) {
+                setEstimatedTimeRemaining(data.estimatedTimeRemaining)
+              }
               
               // If progress is 100%, stop polling
               if (data.progress >= 100) {
@@ -200,11 +246,11 @@ export default function VideoConverter() {
         }, 1000)
       }
 
-      if (response.ok) {
+      if (processResponse.ok) {
         // Check if it's a mock response (development without FFmpeg)
-        const contentType = response.headers.get('Content-Type')
+        const contentType = processResponse.headers.get('Content-Type')
         if (contentType && contentType.includes('application/json')) {
-          const mockData = await response.json()
+          const mockData = await processResponse.json()
           alert(`Development mode: ${mockData.message || 'FFmpeg not installed locally'}`)
           setProgress(100)
           // Create a small mock video file
@@ -214,14 +260,14 @@ export default function VideoConverter() {
           setConvertedSize(mockBlob.size)
         } else {
           // Normal blob response
-          const blob = await response.blob()
+          const blob = await processResponse.blob()
           const url = URL.createObjectURL(blob)
           setConvertedUrl(url)
           setConvertedSize(blob.size)
           setProgress(100) // Ensure progress shows 100% when complete
         }
       } else {
-        const errorData = await response.json().catch(() => ({ error: 'Conversion failed' }))
+        const errorData = await processResponse.json().catch(() => ({ error: 'Conversion failed' }))
         alert(`Conversion failed: ${errorData.error}`)
       }
     } catch (error) {
@@ -311,6 +357,8 @@ export default function VideoConverter() {
             onConvert={convertVideo}
             isConverting={isConverting}
             progress={progress}
+            estimatedTimeRemaining={estimatedTimeRemaining}
+            phase={phase}
           />
 
           <VideoPreview

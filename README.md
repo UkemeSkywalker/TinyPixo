@@ -28,8 +28,11 @@ The application leverages Next.js for server-side rendering, Sharp for high-perf
 ├── app/                          # Next.js application directory
 │   ├── api/                     # API routes for media processing
 │   │   ├── optimize/           # Image optimization API
+│   │   ├── upload/             # File upload API with size limits
 │   │   ├── convert-audio/      # Audio conversion API
+│   │   │   └── process/       # Audio processing API (after upload)
 │   │   ├── convert-video/      # Video conversion API
+│   │   │   └── process/       # Video processing API (after upload)
 │   │   └── progress/           # Real-time progress tracking API
 │   ├── audio-converter/        # Audio conversion page
 │   ├── video-converter/        # Video conversion page
@@ -150,6 +153,11 @@ TinyPixo processes images dynamically through its web interface. Here's what you
 - Processed images must be downloaded after optimization
 - Original images are only held in memory during processing
 
+#### File Size Limits
+- Images: 10MB maximum
+- Audio: 50MB maximum
+- Video: 500MB maximum
+
 ### Quick Start
 
 #### Image Optimization
@@ -198,20 +206,35 @@ const handleImageUpload = async (file: File) => {
 
 #### Audio Conversion
 ```typescript
-// Convert audio file
+// Convert audio file - Two-step process
 const convertAudio = async (file: File) => {
-  const formData = new FormData();
-  formData.append('audio', file);
-  formData.append('format', 'mp3');
-  formData.append('quality', '192k');
+  // Step 1: Upload the file
+  const uploadFormData = new FormData();
+  uploadFormData.append('file', file);
+  uploadFormData.append('fileType', 'audio');
   
-  const response = await fetch('/api/convert-audio', {
+  const uploadResponse = await fetch('/api/upload', {
     method: 'POST',
-    body: formData
+    body: uploadFormData
+  });
+  
+  const uploadData = await uploadResponse.json();
+  
+  // Step 2: Process the file
+  const processResponse = await fetch('/api/convert-audio/process', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fileName: uploadData.fileName,
+      format: 'mp3',
+      quality: '192k'
+    })
   });
   
   // Get job ID for progress tracking
-  const jobId = response.headers.get('X-Job-Id');
+  const jobId = processResponse.headers.get('X-Job-Id');
   
   // Poll for progress updates
   const progressInterval = setInterval(async () => {
@@ -224,27 +247,56 @@ const convertAudio = async (file: File) => {
     }
   }, 1000);
   
-  const convertedAudio = await response.blob();
+  const convertedAudio = await processResponse.blob();
 }
 ```
 
 #### Video Conversion
 ```typescript
-// Convert video file
+// Convert video file - Two-step process
 const convertVideo = async (file: File) => {
-  const formData = new FormData();
-  formData.append('video', file);
-  formData.append('format', 'mp4');
-  formData.append('quality', 'medium'); // high, medium, low
-  formData.append('resolution', '720p'); // 1080p, 720p, 480p, 360p, original
-  formData.append('fps', 'original'); // 30, 60, original
+  // Step 1: Upload the file
+  const uploadFormData = new FormData();
+  uploadFormData.append('file', file);
+  uploadFormData.append('fileType', 'video');
   
-  const response = await fetch('/api/convert-video', {
+  const uploadResponse = await fetch('/api/upload', {
     method: 'POST',
-    body: formData
+    body: uploadFormData
   });
   
-  const convertedVideo = await response.blob();
+  const uploadData = await uploadResponse.json();
+  
+  // Step 2: Process the file
+  const processResponse = await fetch('/api/convert-video/process', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      fileName: uploadData.fileName,
+      format: 'mp4',
+      quality: 'medium', // high, medium, low
+      resolution: '720p', // 1080p, 720p, 480p, 360p, original
+      fps: 'original' // 30, 60, original
+    })
+  });
+  
+  // Get job ID for progress tracking
+  const jobId = processResponse.headers.get('X-Job-Id');
+  
+  // Poll for progress updates
+  const progressInterval = setInterval(async () => {
+    const progressResponse = await fetch(`/api/progress?jobId=${jobId}`);
+    const data = await progressResponse.json();
+    console.log(`Conversion progress: ${data.progress}%`);
+    
+    if (data.progress >= 100) {
+      clearInterval(progressInterval);
+    }
+  }, 1000);
+  
+  const convertedVideo = await processResponse.blob();
 }
 ```
 
