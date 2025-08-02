@@ -46,7 +46,7 @@ export default function Home() {
     return pollInterval
   }
 
-  const processImage = async (file?: File) => {
+  const processImage = async (file?: File, newFormat?: string, newQuality?: number, newWidth?: number, newHeight?: number) => {
     if (!originalImage && !file) return
     
     setIsProcessing(true)
@@ -75,6 +75,7 @@ export default function Home() {
       formData.append('jobId', jobId)
       if (width) formData.append('width', width.toString())
       if (height) formData.append('height', height.toString())
+
 
       const response = await fetch('/api/optimize', {
         method: 'POST',
@@ -320,19 +321,19 @@ export default function Home() {
               maintainAspect={maintainAspect}
               onFormatChange={(newFormat) => {
                 setFormat(newFormat)
-                setTimeout(() => processImage(), 100)
+                setTimeout(() => processImage(undefined, newFormat), 100)
               }}
               onQualityChange={(newQuality) => {
                 setQuality(newQuality)
-                setTimeout(() => processImage(), 100)
+                setTimeout(() => processImage(undefined, undefined, newQuality), 100)
               }}
               onWidthChange={(newWidth) => {
                 setWidth(newWidth)
-                setTimeout(() => processImage(), 100)
+                setTimeout(() => processImage(undefined, undefined, undefined, newWidth), 100)
               }}
               onHeightChange={(newHeight) => {
                 setHeight(newHeight)
-                setTimeout(() => processImage(), 100)
+                setTimeout(() => processImage(undefined, undefined, undefined, undefined, newHeight), 100)
               }}
               onMaintainAspectChange={setMaintainAspect}
               onPercentageResize={(percentage) => {
@@ -341,7 +342,7 @@ export default function Home() {
                   const newHeight = Math.round(originalDimensions.height * (percentage / 100))
                   setWidth(newWidth)
                   setHeight(newHeight)
-                  setTimeout(() => processImage(), 100)
+                  setTimeout(() => processImage(undefined, undefined, undefined, newWidth, newHeight), 100)
                 }
               }}
             />
