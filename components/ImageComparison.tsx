@@ -29,6 +29,8 @@ export default function ImageComparison({
 }: ImageComparisonProps) {
   const savings = originalSize > 0 ? Math.round(((originalSize - optimizedSize) / originalSize) * 100) : 0
   const ratio = originalSize > 0 ? (originalSize / optimizedSize).toFixed(1) : '0'
+  const isLarger = optimizedSize > originalSize
+  const increase = isLarger ? Math.round(((optimizedSize - originalSize) / originalSize) * 100) : 0
 
   return (
     <>
@@ -75,6 +77,27 @@ export default function ImageComparison({
         </div>
       </div>
 
+      {/* Warning for larger files */}
+      {isLarger && optimizedSize > 0 && (
+        <div className="mt-4 bg-yellow-900/20 border border-yellow-600/30 rounded-lg p-4">
+          <div className="flex items-center gap-2 text-yellow-400 mb-2">
+            <span className="text-lg">⚠️</span>
+            <span className="font-medium">Compression Result Larger Than Original</span>
+          </div>
+          <p className="text-yellow-200 text-sm">
+            The converted image is {increase}% larger than the original. This can happen with:
+          </p>
+          <ul className="text-yellow-200 text-sm mt-2 ml-4 list-disc">
+            <li>Already highly compressed images</li>
+            <li>Simple images with few colors</li>
+            <li>Converting from efficient formats (WebP) to less efficient ones (PNG)</li>
+          </ul>
+          <p className="text-yellow-200 text-sm mt-2">
+            Consider using the original format or trying a different output format.
+          </p>
+        </div>
+      )}
+
       {/* Stats */}
       <div className="mt-6 bg-gray-800 rounded-xl p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -83,12 +106,16 @@ export default function ImageComparison({
             <div className="text-sm text-gray-400">Original</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-green-400">{formatFileSize(optimizedSize)}</div>
+            <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-green-400'}`}>
+              {formatFileSize(optimizedSize)}
+            </div>
             <div className="text-sm text-gray-400">Compressed</div>
           </div>
           <div>
-            <div className="text-2xl font-bold text-blue-400">{savings}%</div>
-            <div className="text-sm text-gray-400">Saved</div>
+            <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-blue-400'}`}>
+              {isLarger ? `+${increase}%` : `${savings}%`}
+            </div>
+            <div className="text-sm text-gray-400">{isLarger ? 'Increased' : 'Saved'}</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-purple-400">{ratio}:1</div>

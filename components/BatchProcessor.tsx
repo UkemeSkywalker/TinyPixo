@@ -45,7 +45,7 @@ export default function BatchProcessor({ files, format, quality, width, height, 
 
       try {
         // Check file size before processing
-        if (batchFiles[i].file.size > 15 * 1024 * 1024) {
+        if (batchFiles[i].file.size > 50 * 1024 * 1024) {
           setBatchFiles(prev => prev.map((bf, idx) => 
             idx === i ? { ...bf, status: 'error' } : bf
           ))
@@ -261,8 +261,16 @@ export default function BatchProcessor({ files, format, quality, width, height, 
                 <div className="text-sm text-gray-400">
                   {formatFileSize(bf.originalSize)}
                   {bf.status === 'completed' && (
-                    <span className="text-green-400 ml-2">
+                    <span className={`ml-2 ${bf.optimizedSize > bf.originalSize ? 'text-yellow-400' : 'text-green-400'}`}>
                       → {formatFileSize(bf.optimizedSize)}
+                      {bf.optimizedSize > bf.originalSize && (
+                        <span className="text-xs ml-1">⚠️</span>
+                      )}
+                    </span>
+                  )}
+                  {bf.status === 'error' && (
+                    <span className="text-red-400 ml-2 text-xs">
+                      {bf.file.size > 50 * 1024 * 1024 ? 'Too large' : 'Failed'}
                     </span>
                   )}
                 </div>
