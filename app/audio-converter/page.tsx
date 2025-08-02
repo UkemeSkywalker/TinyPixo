@@ -7,6 +7,7 @@ import AudioPreview from '../../components/audio/AudioPreview'
 
 export default function AudioConverter() {
   const [originalFile, setOriginalFile] = useState<File | null>(null)
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
   const [convertedUrl, setConvertedUrl] = useState<string | null>(null)
   const [originalSize, setOriginalSize] = useState<number>(0)
   const [convertedSize, setConvertedSize] = useState<number>(0)
@@ -16,68 +17,52 @@ export default function AudioConverter() {
   const [progress, setProgress] = useState<number>(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null)
   const [phase, setPhase] = useState<'uploading' | 'converting'>('uploading')
-  const [ffmpegLoaded, setFfmpegLoaded] = useState<boolean>(false)
-  const ffmpegRef = useRef<any>(null)
 
-  // Load FFmpeg WASM for local development
-  useEffect(() => {
-    // Skip FFmpeg loading in production (we use server-side FFmpeg there)
-    if (typeof window === 'undefined' || process.env.NODE_ENV === 'production') return
-    
-    const loadFFmpeg = async () => {
-      try {
-        console.log('Loading client-side FFmpeg for local development')
-        const { FFmpeg } = await import('@ffmpeg/ffmpeg')
-        const { toBlobURL } = await import('@ffmpeg/util')
-        
-        const ffmpeg = new FFmpeg()
-        ffmpegRef.current = ffmpeg
-        
-        ffmpeg.on('progress', ({ progress }) => {
-          setProgress(Math.round(progress * 100))
-        })
-        
-        // Try multiple CDNs for better reliability
-        const cdnUrls = [
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-          'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd'
-        ]
-        
-        let loaded = false
-        for (const baseURL of cdnUrls) {
-          try {
-            await ffmpeg.load({
-              coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-              wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-            })
-            loaded = true
-            break
-          } catch (err) {
-            console.warn(`Failed to load from ${baseURL}:`, err)
-            continue
-          }
-        }
-        
-        if (!loaded) {
-          throw new Error('All CDN sources failed to load')
-        }
-        
-        setFfmpegLoaded(true)
-        console.log('FFmpeg loaded successfully for local development')
-      } catch (error) {
-        console.error('Failed to load FFmpeg:', error)
-        setFfmpegLoaded(false)
-      }
-    }
-    
-    loadFFmpeg()
-  }, [])
+
+
 
   const handleAudioUpload = (file: File) => {
     setOriginalFile(file)
     setOriginalSize(file.size)
+    setUploadedFileName(null) // Reset uploaded file name for new file
     setConvertedUrl(null)
     setConvertedSize(0)
+  }
+
+  const uploadFileInChunks = async (file: File): Promise<string> => {
+    const chunkSize = 1024 * 1024 // 1MB chunks
+    const totalChunks = Math.ceil(file.size / chunkSize)
+    const fileId = Date.now().toString()
+    const extension = file.name.split('.').pop()
+    const fileName = `${fileId}.${extension}`
+
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const chunk = file.slice(start, end)
+
+      const formData = new FormData()
+      formData.append('chunk', chunk)
+      formData.append('chunkIndex', i.toString())
+      formData.append('totalChunks', totalChunks.toString())
+      formData.append('fileId', fileId)
+      formData.append('fileName', fileName)
+
+      const response = await fetch('/api/upload-chunk', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Chunk ${i} upload failed`)
+      }
+
+      // Update upload progress
+      const uploadProgress = Math.round(((i + 1) / totalChunks) * 100)
+      setProgress(uploadProgress)
+    }
+
+    return fileName
   }
 
   const convertAudio = async () => {
@@ -88,110 +73,48 @@ export default function AudioConverter() {
 
     setIsConverting(true)
     setProgress(0)
-    setPhase('uploading')
 
-    // Use client-side FFmpeg in development, server-side in production
-    const isProduction = process.env.NODE_ENV === 'production' || typeof window === 'undefined'
-    const useClientFFmpeg = !isProduction && ffmpegLoaded && ffmpegRef.current
-    
     let progressInterval = null
     try {
-      // Client-side FFmpeg for local development
-      if (useClientFFmpeg) {
-        console.log('Using client-side FFmpeg for local development')
-        const ffmpeg = ffmpegRef.current
-        const { fetchFile } = await import('@ffmpeg/util')
-        
-        const inputName = 'input.' + originalFile.name.split('.').pop()
-        const outputName = `output.${format}`
-
-        await ffmpeg.writeFile(inputName, await fetchFile(originalFile))
-
-        const args = ['-i', inputName, '-b:a', quality]
-        if (format === 'mp3') args.push('-codec:a', 'libmp3lame')
-        else if (format === 'aac') args.push('-codec:a', 'aac')
-        else if (format === 'ogg') args.push('-codec:a', 'libvorbis')
-        
-        args.push(outputName)
-        await ffmpeg.exec(args)
-
-        const data = await ffmpeg.readFile(outputName)
-        const blob = new Blob([data], { type: `audio/${format}` })
-        const url = URL.createObjectURL(blob)
-        
-        setConvertedUrl(url)
-        setConvertedSize(blob.size)
-        setProgress(100) // Ensure progress shows 100% when complete
-        return
+      let fileName = uploadedFileName
+      
+      // Only upload if file hasn't been uploaded yet
+      if (!uploadedFileName) {
+        setPhase('uploading')
+        fileName = await uploadFileInChunks(originalFile)
+        setUploadedFileName(fileName)
       }
       
-      // Server-side FFmpeg for production - Two-step process
-      // Step 1: Upload the file
-      setProgress(1) // Show initial progress
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', originalFile)
-      uploadFormData.append('fileType', 'audio')
+      // Phase 2: Convert the uploaded file
+      setPhase('converting')
+      setProgress(0)
       
-      try {
-        console.log(`Uploading audio file: ${originalFile.name}, size: ${originalFile.size} bytes`)
-        const uploadResponse = await fetch('/api/upload', {
-          method: 'POST',
-          body: uploadFormData,
-        })
-        
-        if (!uploadResponse.ok) {
-          let errorMessage = 'Upload failed'
-          try {
-            const errorData = await uploadResponse.json()
-            errorMessage = errorData.error || errorMessage
-          } catch (e) {
-            console.error('Failed to parse error response:', e)
-          }
-          throw new Error(`Upload failed (${uploadResponse.status}): ${errorMessage}`)
-        }
-        console.log('Upload successful')
-      } catch (error) {
-        console.error('Upload error:', error)
-        throw new Error(`Upload failed: ${error.message || 'Network error'}`)
-      }
-      
-      const uploadData = await uploadResponse.json()
-      setProgress(20) // Show upload complete
-      setPhase('converting') // Switch to converting phase
-      
-      // Step 2: Process the file
       const processResponse = await fetch('/api/convert-audio/process', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileName: uploadData.fileName,
+          fileName,
           format,
           quality,
         }),
       })
       
-      // Get job ID from response headers
       const jobId = processResponse.headers.get('X-Job-Id')
       
-      // Start progress polling if we have a job ID
       if (jobId) {
         progressInterval = setInterval(async () => {
           try {
             const progressResponse = await fetch(`/api/progress?jobId=${jobId}`)
             if (progressResponse.ok) {
               const data = await progressResponse.json()
-              // Scale progress to start from 20% (after upload) to 100%
-              const scaledProgress = 20 + (data.progress * 0.8)
-              setProgress(Math.round(scaledProgress))
+              setProgress(data.progress)
               
-              // Update estimated time remaining
               if (data.estimatedTimeRemaining !== undefined) {
                 setEstimatedTimeRemaining(data.estimatedTimeRemaining)
               }
               
-              // If progress is 100%, stop polling
               if (data.progress >= 100) {
                 clearInterval(progressInterval)
                 progressInterval = null
@@ -204,24 +127,10 @@ export default function AudioConverter() {
       }
 
       if (processResponse.ok) {
-        // Check if it's a mock response (development without FFmpeg)
-        const contentType = processResponse.headers.get('Content-Type')
-        if (contentType && contentType.includes('application/json')) {
-          const mockData = await processResponse.json()
-          alert(`Development mode: ${mockData.message || 'FFmpeg not installed locally'}`)
-          setProgress(100)
-          // Create a small mock audio file
-          const mockBlob = new Blob([new ArrayBuffer(1024)], { type: 'audio/mp3' })
-          const url = URL.createObjectURL(mockBlob)
-          setConvertedUrl(url)
-          setConvertedSize(mockBlob.size)
-        } else {
-          // Normal blob response
-          const blob = await processResponse.blob()
-          const url = URL.createObjectURL(blob)
-          setConvertedUrl(url)
-          setConvertedSize(blob.size)
-        }
+        const blob = await processResponse.blob()
+        const url = URL.createObjectURL(blob)
+        setConvertedUrl(url)
+        setConvertedSize(blob.size)
       } else {
         const errorData = await processResponse.json().catch(() => ({ error: 'Conversion failed' }))
         alert(`Conversion failed: ${errorData.error}`)
@@ -230,7 +139,6 @@ export default function AudioConverter() {
       console.error('Conversion failed:', error)
       alert('Conversion failed. Please try again.')
     } finally {
-      // Clean up interval if it exists
       if (progressInterval) {
         clearInterval(progressInterval)
       }
@@ -250,6 +158,7 @@ export default function AudioConverter() {
 
   const handleBackToUpload = () => {
     setOriginalFile(null)
+    setUploadedFileName(null)
     setConvertedUrl(null)
     setOriginalSize(0)
     setConvertedSize(0)
@@ -279,12 +188,12 @@ export default function AudioConverter() {
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
               <div className="text-3xl mb-3">⚡</div>
               <h3 className="text-lg font-semibold text-white mb-2">Fast Processing</h3>
-              <p className="text-gray-400">Client-side conversion means your files never leave your device.</p>
+              <p className="text-gray-400">Chunked upload for large files with real-time progress tracking.</p>
             </div>
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-              <div className="text-3xl mb-3">🔒</div>
-              <h3 className="text-lg font-semibold text-white mb-2">100% Private</h3>
-              <p className="text-gray-400">All processing happens locally in your browser.</p>
+              <div className="text-3xl mb-3">📁</div>
+              <h3 className="text-lg font-semibold text-white mb-2">Large Files</h3>
+              <p className="text-gray-400">Support for audio files up to 200MB with reliable upload.</p>
             </div>
           </div>
         </>
@@ -321,11 +230,7 @@ export default function AudioConverter() {
         </>
       )}
 
-      {!(process.env.NODE_ENV === 'production') && !ffmpegLoaded && (
-        <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg">
-          Loading client-side FFmpeg...
-        </div>
-      )}
+
     </main>
   )
 }
