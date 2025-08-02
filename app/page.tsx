@@ -5,6 +5,7 @@ import ImageUpload from '../components/ImageUpload'
 import ImageComparison from '../components/ImageComparison'
 import ControlPanel from '../components/ControlPanel'
 import BatchProcessor from '../components/BatchProcessor'
+import ProgressBar from '../components/ProgressBar'
 
 export default function Home() {
   const [originalImage, setOriginalImage] = useState<string | null>(null)
@@ -20,11 +21,45 @@ export default function Home() {
   const [originalDimensions, setOriginalDimensions] = useState<{width: number, height: number} | null>(null)
   const [batchFiles, setBatchFiles] = useState<File[] | null>(null)
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
+  const [progress, setProgress] = useState<number>(0)
+  const [progressStatus, setProgressStatus] = useState<string>('Processing...')
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+
+  const pollProgress = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/progress?jobId=${jobId}`)
+        if (response.ok) {
+          const data = await response.json()
+          setProgress(data.progress || 0)
+          setProgressStatus(data.status || 'Processing...')
+          
+          if (data.progress >= 100 || data.status === 'completed' || data.status === 'error') {
+            clearInterval(pollInterval)
+          }
+        }
+      } catch (error) {
+        console.error('Progress polling error:', error)
+      }
+    }, 200) // Poll every 200ms for smooth progress updates
+    
+    return pollInterval
+  }
 
   const processImage = async (file?: File) => {
     if (!originalImage && !file) return
     
     setIsProcessing(true)
+    setProgress(0)
+    setProgressStatus('Starting...')
+    
+    // Generate unique job ID
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    setCurrentJobId(jobId)
+    
+    // Start progress polling
+    const pollInterval = await pollProgress(jobId)
+    
     try {
       const formData = new FormData()
       if (file) {
@@ -37,6 +72,7 @@ export default function Home() {
       
       formData.append('format', format)
       formData.append('quality', quality.toString())
+      formData.append('jobId', jobId)
       if (width) formData.append('width', width.toString())
       if (height) formData.append('height', height.toString())
 
@@ -50,16 +86,24 @@ export default function Home() {
         const optimizedUrl = URL.createObjectURL(blob)
         setOptimizedImage(optimizedUrl)
         setOptimizedSize(blob.size)
+        setProgress(100)
+        setProgressStatus('Completed!')
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Processing failed' }))
         console.error('Processing failed:', errorData.error)
         alert(`Processing failed: ${errorData.error || 'Unknown error'}. Try with a smaller image.`)
+        setProgress(0)
+        setProgressStatus('Error occurred')
       }
     } catch (error) {
       console.error('Processing failed:', error)
       alert('Processing failed. Please try with a smaller image or check your connection.')
+      setProgress(0)
+      setProgressStatus('Error occurred')
     } finally {
+      clearInterval(pollInterval)
       setIsProcessing(false)
+      setCurrentJobId(null)
     }
   }
 
@@ -265,6 +309,8 @@ export default function Home() {
               originalSize={originalSize}
               optimizedSize={optimizedSize}
               isProcessing={isProcessing}
+              progress={progress}
+              progressStatus={progressStatus}
             />
             <ControlPanel
               format={format}
@@ -345,9 +391,14 @@ export default function Home() {
       {/* Loading Overlay */}
       {isProcessing && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-4"></div>
-            <p className="text-white">Processing image...</p>
+          <div className="bg-gray-800 p-8 rounded-lg border border-gray-700 text-center min-w-80">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400 mx-auto mb-6"></div>
+            <p className="text-white mb-4">{progressStatus}</p>
+            <ProgressBar 
+              progress={progress} 
+              isVisible={true} 
+              label=""
+            />
           </div>
         </div>
       )}
