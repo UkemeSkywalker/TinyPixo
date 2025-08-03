@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
     global.conversionProgress = global.conversionProgress || {}
     const progressData = global.conversionProgress[jobId] || { jobId, progress: 0 }
     
+    console.log(`Progress API called for jobId: ${jobId}, returning:`, progressData)
+    
     return NextResponse.json(progressData)
   } catch (error) {
     console.error('Progress tracking error:', error)

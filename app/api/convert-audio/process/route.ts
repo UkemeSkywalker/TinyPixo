@@ -42,31 +42,54 @@ export async function POST(request: NextRequest) {
     global.conversionProgress = global.conversionProgress || {}
     global.conversionProgress[jobId] = progressData
     
-    return new Promise<NextResponse>((resolve) => {
-      // Use system FFmpeg (needs to be installed locally)
-      const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
-      console.log(`Using FFmpeg at: ${ffmpegPath}`)
+    // Start FFmpeg process asynchronously
+    const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
+    console.log(`Using FFmpeg at: ${ffmpegPath}`)
+    console.log(`Starting conversion with args:`, args)
+    
+    try {
+      const ffmpeg = spawn(ffmpegPath, args)
       
-      try {
-        const ffmpeg = spawn(ffmpegPath, args)
-        
-        // Handle spawn errors
-        ffmpeg.on('error', (err) => {
-          console.error('FFmpeg spawn error:', err)
-          resolve(NextResponse.json({ error: 'FFmpeg process error: ' + err.message }, { status: 500 }))
-        })
+      // Handle spawn errors
+      ffmpeg.on('error', (err) => {
+        console.error('FFmpeg spawn error:', err)
+        progressData.progress = -1
+        global.conversionProgress[jobId] = progressData
+      })
         
         // Track if we've found the duration
         let totalDuration = 30 // Default assumption (30 seconds)
         let durationFound = false
+        let processingStarted = false
+        let lastProgressUpdate = Date.now()
+        
+        // Set initial progress
+        progressData.progress = 1
+        global.conversionProgress[jobId] = progressData
+        console.log('Initial progress set to 1%')
+        
+        // Add periodic progress updates during processing
+        const progressTimer = setInterval(() => {
+          if (processingStarted && progressData.progress < 95) {
+            // Gradually increase progress during processing
+            const elapsed = Date.now() - lastProgressUpdate
+            if (elapsed > 2000) { // Every 2 seconds
+              progressData.progress = Math.min(90, progressData.progress + 5)
+              global.conversionProgress[jobId] = progressData
+              console.log(`Intermediate progress update: ${progressData.progress}%`)
+              lastProgressUpdate = Date.now()
+            }
+          }
+        }, 2000)
         
         // Capture stderr for progress tracking
         ffmpeg.stderr.on('data', (data) => {
           const output = data.toString()
+          console.log('FFmpeg stderr:', output)
           
           // First try to find duration in the output
           if (!durationFound) {
-            const durationMatch = output.match(/Duration: ([\\d:.]+)/)
+            const durationMatch = output.match(/Duration: ([\d:.]+)/)
             if (durationMatch && durationMatch[1]) {
               const durationParts = durationMatch[1].split(':')
               totalDuration = 
@@ -75,11 +98,24 @@ export async function POST(request: NextRequest) {
                 parseFloat(durationParts[2])
               durationFound = true
               console.log(`Detected audio duration: ${totalDuration} seconds`)
+              
+              // Set progress to 5% once we detect duration
+              progressData.progress = 5
+              global.conversionProgress[jobId] = progressData
+              console.log('Progress updated to 5% (duration detected)')
             }
           }
           
+          // Detect when processing actually starts
+          if (output.includes('Press [q] to stop') || output.includes('Stream mapping:')) {
+            processingStarted = true
+            progressData.progress = 10
+            global.conversionProgress[jobId] = progressData
+            console.log('Processing started, progress set to 10%')
+          }
+          
           // Look for time=00:00:00.00 pattern in FFmpeg output
-          const timeMatch = output.match(/time=([\\d:.]+)/)
+          const timeMatch = output.match(/time=([\d:.]+)/)
           if (timeMatch && timeMatch[1]) {
             const timeParts = timeMatch[1].split(':')
             const seconds = 
@@ -87,62 +123,76 @@ export async function POST(request: NextRequest) {
               parseFloat(timeParts[1]) * 60 + 
               parseFloat(timeParts[2])
             
-            // Calculate progress based on detected duration
-            const progress = Math.min(99, Math.round((seconds / totalDuration) * 100))
-            
-            // Calculate estimated time remaining
-            if (progress > 0) {
-              const elapsedMs = Date.now() - progressData.startTime
-              const estimatedTotalMs = (elapsedMs / progress) * 100
-              const estimatedRemainingMs = Math.max(0, estimatedTotalMs - elapsedMs)
+            // Only calculate progress if we have meaningful time data
+            if (seconds > 0) {
+              // Calculate progress based on detected duration
+              const progress = Math.min(95, Math.max(15, Math.round((seconds / totalDuration) * 100)))
               
-              // Convert to seconds and round
-              const estimatedRemainingSeconds = Math.round(estimatedRemainingMs / 1000)
-              
-              // Update progress data
-              progressData.progress = progress
-              progressData.estimatedTimeRemaining = estimatedRemainingSeconds
-            } else {
-              progressData.progress = progress
+              // Only update if progress actually changed
+              if (progress !== progressData.progress) {
+                // Calculate estimated time remaining
+                const elapsedMs = Date.now() - progressData.startTime
+                const estimatedTotalMs = (elapsedMs / progress) * 100
+                const estimatedRemainingMs = Math.max(0, estimatedTotalMs - elapsedMs)
+                
+                // Convert to seconds and round
+                const estimatedRemainingSeconds = Math.round(estimatedRemainingMs / 1000)
+                
+                // Update progress data
+                progressData.progress = progress
+                progressData.estimatedTimeRemaining = estimatedRemainingSeconds
+                
+                global.conversionProgress[jobId] = progressData
+                console.log(`Progress updated: ${progress}% (${seconds.toFixed(1)}s/${totalDuration}s)`)
+              }
             }
-            
-            global.conversionProgress[jobId] = progressData
           }
         })
         
-        ffmpeg.on('close', async (code) => {
-          try {
-            if (code === 0) {
-              const outputBuffer = await readFile(outputPath)
-              await unlink(inputPath)
-              await unlink(outputPath)
-              
-              // Set progress to 100% when complete
-              progressData.progress = 100
-              global.conversionProgress[jobId] = progressData
-              
-              resolve(new NextResponse(outputBuffer, {
-                headers: { 
-                  'Content-Type': `audio/${format}`,
-                  'Content-Length': outputBuffer.length.toString(),
-                  'X-Job-Id': jobId
-                }
-              }))
-            } else {
-              await unlink(inputPath).catch(() => {})
-              await unlink(outputPath).catch(() => {})
-              resolve(NextResponse.json({ error: 'Audio conversion failed' }, { status: 500 }))
-            }
-          } catch (error) {
-            resolve(NextResponse.json({ error: 'File processing error' }, { status: 500 }))
+      ffmpeg.on('close', async (code) => {
+        clearInterval(progressTimer) // Stop the progress timer
+        console.log(`FFmpeg process closed with code: ${code}`)
+        try {
+          if (code === 0) {
+            // Set progress to 98% before reading file
+            progressData.progress = 98
+            global.conversionProgress[jobId] = progressData
+            console.log('Progress updated to 98% (reading output file)')
+            
+            const outputBuffer = await readFile(outputPath)
+            await unlink(inputPath)
+            
+            // Store the output file for download
+            progressData.outputBuffer = outputBuffer
+            progressData.outputPath = outputPath
+            progressData.format = format
+            
+            // Set progress to 100% when complete
+            progressData.progress = 100
+            global.conversionProgress[jobId] = progressData
+            console.log('Progress updated to 100% (conversion complete)')
+          } else {
+            console.error(`FFmpeg failed with exit code: ${code}`)
+            progressData.progress = -1
+            global.conversionProgress[jobId] = progressData
+            await unlink(inputPath).catch(() => {})
+            await unlink(outputPath).catch(() => {})
           }
-        })
-      } catch (error) {
-        console.error('Failed to spawn FFmpeg:', error)
-        resolve(NextResponse.json({ 
-          error: 'FFmpeg not found. Please install FFmpeg on your system.'
-        }, { status: 500 }))
-      }
+        } catch (error) {
+          console.error('Error in FFmpeg close handler:', error)
+          progressData.progress = -1
+          global.conversionProgress[jobId] = progressData
+        }
+      })
+    } catch (error) {
+      console.error('Failed to spawn FFmpeg:', error)
+      progressData.progress = -1
+      global.conversionProgress[jobId] = progressData
+    }
+    
+    // Return jobId immediately for progress tracking
+    return NextResponse.json({ jobId }, {
+      headers: { 'X-Job-Id': jobId }
     })
   } catch (error) {
     console.error('Audio conversion error:', error)
