@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import sharp from 'sharp'
 
 // Global progress tracking
-declare global {
-  var conversionProgress: { [key: string]: { jobId: string; progress: number; status: string } }
-}
 
 global.conversionProgress = global.conversionProgress || {}
 

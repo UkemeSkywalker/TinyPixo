@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         setTimeout(() => reject(new Error('File buffer extraction timed out')), 60000) // 1 minute timeout
       })
       
-      const arrayBuffer = await Promise.race([arrayBufferPromise, timeoutPromise])
+      const arrayBuffer = await Promise.race([arrayBufferPromise, timeoutPromise]) as ArrayBuffer
       console.log(`File buffer obtained, size: ${arrayBuffer.byteLength} bytes`)
       
       // Write file to temporary storage
