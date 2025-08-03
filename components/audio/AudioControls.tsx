@@ -89,6 +89,11 @@ export default function AudioControls({
                 <span> • Estimated time remaining: {formatTime(estimatedTimeRemaining)}</span>
               )}
             </p>
+            {phase === 'converting' && progress < 100 && (
+              <p className="text-xs text-purple-300 mt-1 animate-pulse">
+                Please be patient, conversion in progress...
+              </p>
+            )}
           </div>
         )}
       </div>
