@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     
     return new NextResponse(progressData.outputBuffer, {
       headers: { 
-        'Content-Type': `audio/${progressData.format}`,
+        'Content-Type': `audio/${progressData.format || 'mp3'}`,
         'Content-Length': progressData.outputBuffer.length.toString()
       }
     })

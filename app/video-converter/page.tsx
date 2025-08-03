@@ -172,6 +172,7 @@ export default function VideoConverter() {
       uploadFormData.append('file', originalFile)
       uploadFormData.append('fileType', 'video')
       
+      let uploadData
       try {
         console.log(`Uploading video file: ${originalFile.name}, size: ${originalFile.size} bytes`)
         const uploadResponse = await fetch('/api/upload', {
@@ -189,13 +190,12 @@ export default function VideoConverter() {
           }
           throw new Error(`Upload failed (${uploadResponse.status}): ${errorMessage}`)
         }
+        uploadData = await uploadResponse.json()
         console.log('Upload successful')
       } catch (error) {
         console.error('Upload error:', error)
         throw new Error(`Upload failed: ${error.message || 'Network error'}`)
       }
-      
-      const uploadData = await uploadResponse.json()
       setProgress(20) // Show upload complete
       setPhase('converting') // Switch to converting phase
       

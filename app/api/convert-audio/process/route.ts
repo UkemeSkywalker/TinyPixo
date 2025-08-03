@@ -3,6 +3,18 @@ import { spawn } from 'child_process'
 import { readFile, unlink, access } from 'fs/promises'
 import { join } from 'path'
 
+// Import the global type
+type ConversionProgress = {
+  jobId: string
+  progress: number
+  status?: string
+  startTime?: number
+  estimatedTimeRemaining?: number | null
+  outputBuffer?: Buffer
+  outputPath?: string
+  format?: string
+}
+
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json()
@@ -31,7 +43,7 @@ export async function POST(request: NextRequest) {
     
     // Create a unique job ID for this conversion
     const jobId = Date.now().toString()
-    let progressData = { 
+    let progressData: ConversionProgress = { 
       jobId, 
       progress: 0,
       startTime: Date.now(),
@@ -54,7 +66,9 @@ export async function POST(request: NextRequest) {
       ffmpeg.on('error', (err) => {
         console.error('FFmpeg spawn error:', err)
         progressData.progress = -1
-        global.conversionProgress[jobId] = progressData
+        if (global.conversionProgress) {
+          global.conversionProgress[jobId] = progressData
+        }
       })
         
         // Track if we've found the duration
@@ -65,7 +79,9 @@ export async function POST(request: NextRequest) {
         
         // Set initial progress
         progressData.progress = 1
-        global.conversionProgress[jobId] = progressData
+        if (global.conversionProgress) {
+          global.conversionProgress[jobId] = progressData
+        }
         console.log('Initial progress set to 1%')
         
         // Add periodic progress updates during processing
@@ -75,7 +91,9 @@ export async function POST(request: NextRequest) {
             const elapsed = Date.now() - lastProgressUpdate
             if (elapsed > 2000) { // Every 2 seconds
               progressData.progress = Math.min(90, progressData.progress + 5)
-              global.conversionProgress[jobId] = progressData
+              if (global.conversionProgress) {
+                global.conversionProgress[jobId] = progressData
+              }
               console.log(`Intermediate progress update: ${progressData.progress}%`)
               lastProgressUpdate = Date.now()
             }
@@ -101,7 +119,9 @@ export async function POST(request: NextRequest) {
               
               // Set progress to 5% once we detect duration
               progressData.progress = 5
-              global.conversionProgress[jobId] = progressData
+              if (global.conversionProgress) {
+                global.conversionProgress[jobId] = progressData
+              }
               console.log('Progress updated to 5% (duration detected)')
             }
           }
@@ -110,7 +130,9 @@ export async function POST(request: NextRequest) {
           if (output.includes('Press [q] to stop') || output.includes('Stream mapping:')) {
             processingStarted = true
             progressData.progress = 10
-            global.conversionProgress[jobId] = progressData
+            if (global.conversionProgress) {
+              global.conversionProgress[jobId] = progressData
+            }
             console.log('Processing started, progress set to 10%')
           }
           
@@ -142,8 +164,10 @@ export async function POST(request: NextRequest) {
                 progressData.progress = progress
                 progressData.estimatedTimeRemaining = estimatedRemainingSeconds
                 
-                global.conversionProgress[jobId] = progressData
-                console.log(`Progress updated: ${progress}% (${seconds.toFixed(1)}s/${totalDuration}s)`)
+                if (global.conversionProgress) {
+                  global.conversionProgress[jobId] = progressData
+                }
+                console.log(`Progress updated: ${progress}% (${seconds.toFixed(1)}s/${totalDuration}s`)
               }
             }
           }
@@ -156,7 +180,9 @@ export async function POST(request: NextRequest) {
           if (code === 0) {
             // Set progress to 98% before reading file
             progressData.progress = 98
-            global.conversionProgress[jobId] = progressData
+            if (global.conversionProgress) {
+              global.conversionProgress[jobId] = progressData
+            }
             console.log('Progress updated to 98% (reading output file)')
             
             const outputBuffer = await readFile(outputPath)
@@ -169,25 +195,33 @@ export async function POST(request: NextRequest) {
             
             // Set progress to 100% when complete
             progressData.progress = 100
-            global.conversionProgress[jobId] = progressData
+            if (global.conversionProgress) {
+              global.conversionProgress[jobId] = progressData
+            }
             console.log('Progress updated to 100% (conversion complete)')
           } else {
             console.error(`FFmpeg failed with exit code: ${code}`)
             progressData.progress = -1
-            global.conversionProgress[jobId] = progressData
+            if (global.conversionProgress) {
+              global.conversionProgress[jobId] = progressData
+            }
             await unlink(inputPath).catch(() => {})
             await unlink(outputPath).catch(() => {})
           }
         } catch (error) {
           console.error('Error in FFmpeg close handler:', error)
           progressData.progress = -1
-          global.conversionProgress[jobId] = progressData
+          if (global.conversionProgress) {
+            global.conversionProgress[jobId] = progressData
+          }
         }
       })
     } catch (error) {
       console.error('Failed to spawn FFmpeg:', error)
       progressData.progress = -1
-      global.conversionProgress[jobId] = progressData
+      if (global.conversionProgress) {
+        global.conversionProgress[jobId] = progressData
+      }
     }
     
     // Return jobId immediately for progress tracking
