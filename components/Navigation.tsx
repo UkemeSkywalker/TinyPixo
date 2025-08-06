@@ -10,8 +10,8 @@ export default function Navigation() {
 
   const links = [
     { href: '/', label: '🖼️ Image Optimizer' },
-    { href: '/audio-converter', label: '🎵 Audio Converter' },
-    { href: '/video-converter', label: '🎬 Video Converter' },
+    // { href: '/audio-converter', label: '🎵 Audio Converter' },
+    // { href: '/video-converter', label: '🎬 Video Converter' },
   ]
 
   return (
