@@ -17,10 +17,10 @@ export async function POST(request: NextRequest) {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Request timed out')), 120000) // 2 minute timeout
     })
-    
+
     const formData = await Promise.race([formDataPromise, timeoutPromise]) as FormData
     console.log('FormData parsed successfully')
-    
+
     const file = formData.get('file') as File
     const fileType = formData.get('fileType') as string // 'audio', 'video', or 'image'
 
@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
     // Check file size
     if (file.size > FILE_SIZE_LIMITS[fileType as keyof typeof FILE_SIZE_LIMITS]) {
       console.log(`File too large: ${file.size} bytes, limit: ${FILE_SIZE_LIMITS[fileType as keyof typeof FILE_SIZE_LIMITS]} bytes`)
-      return NextResponse.json({ 
-        error: `File too large. Maximum size for ${fileType} is ${FILE_SIZE_LIMITS[fileType as keyof typeof FILE_SIZE_LIMITS] / (1024 * 1024)}MB` 
+      return NextResponse.json({
+        error: `File too large. Maximum size for ${fileType} is ${FILE_SIZE_LIMITS[fileType as keyof typeof FILE_SIZE_LIMITS] / (1024 * 1024)}MB`
       }, { status: 400 })
     }
 
@@ -49,27 +49,27 @@ export async function POST(request: NextRequest) {
     const extension = file.name.split('.').pop()
     const fileName = `${fileId}.${extension}`
     const filePath = join('/tmp', fileName)
-    
+
     console.log(`Writing file to: ${filePath}`)
-    
+
     try {
       // Get file buffer with timeout
       console.log('Getting file buffer...')
       const arrayBufferPromise = file.arrayBuffer()
-      const timeoutPromise = new Promise((_, reject) => {
+      const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error('File buffer extraction timed out')), 60000) // 1 minute timeout
       })
-      
-      const arrayBuffer = await Promise.race([arrayBufferPromise, timeoutPromise])
+
+      const arrayBuffer = await Promise.race([arrayBufferPromise, timeoutPromise]) as ArrayBuffer
       console.log(`File buffer obtained, size: ${arrayBuffer.byteLength} bytes`)
-      
+
       // Write file to temporary storage
       await writeFile(filePath, Buffer.from(arrayBuffer))
       console.log('File written successfully')
-      
+
       // Return the file ID for later processing
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         fileId,
         fileName,
         originalName: file.name,

@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     
     // Create a unique job ID for this conversion
     const jobId = Date.now().toString()
-    let progressData = { jobId, progress: 0 }
+    let progressData = { jobId, progress: 0, status: 'processing' }
     
     // Store progress in memory (in production, use Redis or similar)
     global.conversionProgress = global.conversionProgress || {}
@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
           
           // Update progress
           progressData.progress = progress
+          progressData.status = 'processing'
           global.conversionProgress[jobId] = progressData
         }
       })
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
             
             // Set progress to 100% when complete
             progressData.progress = 100
+            progressData.status = 'completed'
             global.conversionProgress[jobId] = progressData
             
             resolve(new NextResponse(outputBuffer, {

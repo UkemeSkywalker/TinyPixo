@@ -172,9 +172,10 @@ export default function VideoConverter() {
       uploadFormData.append('file', originalFile)
       uploadFormData.append('fileType', 'video')
       
+      let uploadResponse
       try {
         console.log(`Uploading video file: ${originalFile.name}, size: ${originalFile.size} bytes`)
-        const uploadResponse = await fetch('/api/upload', {
+        uploadResponse = await fetch('/api/upload', {
           method: 'POST',
           body: uploadFormData,
         })
