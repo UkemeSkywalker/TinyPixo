@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
     let progressData = { 
       jobId, 
       progress: 0,
+      status: 'processing',
       startTime: Date.now(),
       estimatedTimeRemaining: null
     }
@@ -121,8 +122,10 @@ export async function POST(request: NextRequest) {
               // Update progress data
               progressData.progress = progress
               progressData.estimatedTimeRemaining = estimatedRemainingSeconds
+              progressData.status = 'processing'
             } else {
               progressData.progress = progress
+              progressData.status = 'processing'
             }
             
             global.conversionProgress[jobId] = progressData
@@ -138,6 +141,7 @@ export async function POST(request: NextRequest) {
               
               // Set progress to 100% when complete
               progressData.progress = 100
+              progressData.status = 'completed'
               global.conversionProgress[jobId] = progressData
               
               resolve(new NextResponse(outputBuffer, {
