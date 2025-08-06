@@ -65,7 +65,7 @@ export default function ImageUpload({ onImageUpload, onBatchUpload }: ImageUploa
         className="relative border-2 border-dashed border-blue-500/50 rounded-2xl p-12 text-center bg-gradient-to-br from-blue-900/10 to-purple-900/10 hover:border-blue-400 hover:bg-blue-900/20 transition-all duration-300 cursor-pointer group"
         style={{ zIndex: 1 }}
       >
-        <div className="space-y-6 pointer-events-none">
+        <div className="space-y-6">
           <div className="text-7xl group-hover:scale-110 transition-transform duration-300">🚀</div>
           <div>
             <p className="text-2xl font-semibold text-white mb-2">Drop your images here</p>
@@ -79,7 +79,7 @@ export default function ImageUpload({ onImageUpload, onBatchUpload }: ImageUploa
         <input 
           ref={fileInputRef}
           type="file" 
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+          className="hidden" 
           accept="image/*"
           multiple
           onChange={handleFileChange}
