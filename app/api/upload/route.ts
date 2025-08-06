@@ -4,7 +4,7 @@ import { join } from 'path'
 
 // File size limits in bytes
 const FILE_SIZE_LIMITS = {
-  audio: 50 * 1024 * 1024, // 50MB
+  audio: 200 * 1024 * 1024, // 200MB
   video: 500 * 1024 * 1024, // 500MB
   image: 10 * 1024 * 1024, // 10MB
 }
