@@ -1,0 +1,45 @@
+services:
+  localstack:
+    container_name: localstack-audio-converter
+    image: localstack/localstack:2.3
+    ports:
+      - "4566:4566"
+      - "4510-4559:4510-4559"
+    environment:
+      - SERVICES=s3,dynamodb
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - audio-converter-dev
+
+  dynamodb-local:
+    container_name: dynamodb-local-audio-converter
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    networks:
+      - audio-converter-dev
+
+  redis:
+    container_name: redis-audio-converter
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    networks:
+      - audio-converter-dev
+
+volumes:
+  localstack-data:
+  redis-data:
+
+networks:
+  audio-converter-dev:
+    driver: bridge

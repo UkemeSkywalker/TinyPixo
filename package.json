@@ -6,14 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "dev:services": "tsx scripts/start-dev-services.ts",
+    "dev:services:stop": "docker-compose -f docker-compose.dev.yml down",
+    "dev:services:logs": "docker-compose -f docker-compose.dev.yml logs -f",
+    "test:connectivity": "tsx scripts/test-connectivity.ts",
+    "inspect:services": "tsx scripts/inspect-services.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.490.0",
+    "@aws-sdk/client-s3": "^3.490.0",
     "@ffmpeg/ffmpeg": "^0.12.7",
     "@ffmpeg/util": "^0.12.1",
     "next": "^15.3.5",
     "react": "^18",
     "react-dom": "^18",
+    "redis": "^4.6.12",
     "sharp": "^0.32.6"
   },
   "devDependencies": {
@@ -25,6 +33,7 @@
     "eslint-config-next": "^15.3.5",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
+    "tsx": "^4.7.0",
     "typescript": "^5"
   }
 }

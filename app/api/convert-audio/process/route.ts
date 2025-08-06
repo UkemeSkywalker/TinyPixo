@@ -3,7 +3,6 @@ import { spawn } from 'child_process'
 import { readFile, unlink, access } from 'fs/promises'
 import { join } from 'path'
 
-// Import the global type
 type ConversionProgress = {
   jobId: string
   progress: number
@@ -13,6 +12,7 @@ type ConversionProgress = {
   outputBuffer?: Buffer
   outputPath?: string
   format?: string
+  isLargeFile?: boolean
 }
 
 export async function POST(request: NextRequest) {
@@ -59,12 +59,30 @@ export async function POST(request: NextRequest) {
     console.log(`Using FFmpeg at: ${ffmpegPath}`)
     console.log(`Starting conversion with args:`, args)
     
+    // Set maximum conversion time based on file size
+    // For large files, allow more time: 20 minutes for files over 100MB
+    const inputStats = await import('fs/promises').then(fs => 
+      fs.stat(inputPath).catch(() => ({ size: 0 }))
+    )
+    const fileSizeMB = inputStats.size / (1024 * 1024)
+    const maxConversionTime = fileSizeMB > 100 ? 20 * 60 * 1000 : 10 * 60 * 1000
+    
+    console.log(`File size: ${fileSizeMB.toFixed(2)}MB, max conversion time: ${maxConversionTime / 60000} minutes`)
+    const conversionTimeout = setTimeout(() => {
+      console.error(`Conversion timeout for jobId: ${jobId}`)
+      progressData.progress = -1
+      if (global.conversionProgress) {
+        global.conversionProgress[jobId] = progressData
+      }
+    }, maxConversionTime)
+    
     try {
       const ffmpeg = spawn(ffmpegPath, args)
       
       // Handle spawn errors
       ffmpeg.on('error', (err) => {
         console.error('FFmpeg spawn error:', err)
+        clearTimeout(conversionTimeout)
         progressData.progress = -1
         if (global.conversionProgress) {
           global.conversionProgress[jobId] = progressData
@@ -175,23 +193,43 @@ export async function POST(request: NextRequest) {
         
       ffmpeg.on('close', async (code) => {
         clearInterval(progressTimer) // Stop the progress timer
+        clearTimeout(conversionTimeout) // Clear the conversion timeout
         console.log(`FFmpeg process closed with code: ${code}`)
         try {
           if (code === 0) {
-            // Set progress to 98% before reading file
+            // Set progress to 98% before finalizing
             progressData.progress = 98
             if (global.conversionProgress) {
               global.conversionProgress[jobId] = progressData
             }
-            console.log('Progress updated to 98% (reading output file)')
+            console.log('Progress updated to 98% (finalizing conversion)')
             
-            const outputBuffer = await readFile(outputPath)
+            // For large files, don't load into memory - just store the path
+            const outputStats = await import('fs/promises').then(fs => 
+              fs.stat(outputPath).catch(() => ({ size: 0 }))
+            )
+            const outputSizeMB = outputStats.size / (1024 * 1024)
+            
+            console.log(`Output file size: ${outputSizeMB.toFixed(2)}MB`)
+            
+            // Clean up input file
             await unlink(inputPath)
             
-            // Store the output file for download
-            progressData.outputBuffer = outputBuffer
-            progressData.outputPath = outputPath
-            progressData.format = format
+            if (outputSizeMB > 50) {
+              // For large files (>50MB), store path only to avoid memory issues
+              console.log('Large output file - storing path only')
+              progressData.outputPath = outputPath
+              progressData.format = format
+              progressData.isLargeFile = true
+            } else {
+              // For smaller files, load into memory for faster download
+              console.log('Small output file - loading into memory')
+              const outputBuffer = await readFile(outputPath)
+              progressData.outputBuffer = outputBuffer
+              progressData.outputPath = outputPath
+              progressData.format = format
+              progressData.isLargeFile = false
+            }
             
             // Set progress to 100% when complete
             progressData.progress = 100
@@ -218,6 +256,7 @@ export async function POST(request: NextRequest) {
       })
     } catch (error) {
       console.error('Failed to spawn FFmpeg:', error)
+      clearTimeout(conversionTimeout)
       progressData.progress = -1
       if (global.conversionProgress) {
         global.conversionProgress[jobId] = progressData
