@@ -5,13 +5,7 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['sharp'],
   },
-  // Increase the body parser size limit
-  api: {
-    bodyParser: {
-      sizeLimit: process.env.BODY_SIZE_LIMIT || '500mb',
-    },
-    responseLimit: false,
-  },
+
   async headers() {
     return [
       {

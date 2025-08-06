@@ -10,12 +10,17 @@
     "dev:services": "tsx scripts/start-dev-services.ts",
     "dev:services:stop": "docker-compose -f docker-compose.dev.yml down",
     "dev:services:logs": "docker-compose -f docker-compose.dev.yml logs -f",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "test:job-service": "vitest --run lib/job-service.test.ts",
+    "view:jobs": "tsx scripts/view-jobs.ts",
     "test:connectivity": "tsx scripts/test-connectivity.ts",
     "inspect:services": "tsx scripts/inspect-services.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.490.0",
     "@aws-sdk/client-s3": "^3.490.0",
+    "@aws-sdk/util-dynamodb": "^3.490.0",
     "@ffmpeg/ffmpeg": "^0.12.7",
     "@ffmpeg/util": "^0.12.1",
     "next": "^15.3.5",
@@ -34,6 +39,8 @@
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "tsx": "^4.7.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^1.2.0",
+    "@vitest/ui": "^1.2.0"
   }
 }
