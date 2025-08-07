@@ -49,7 +49,7 @@ export async function getRedisClient(): Promise<RedisClientType> {
 
 // Service initialization functions
 export async function initializeS3(): Promise<void> {
-    const bucketName = 'audio-conversion-bucket'
+    const bucketName = process.env.S3_BUCKET_NAME || 'audio-conversion-bucket'
 
     try {
         // Check if bucket exists

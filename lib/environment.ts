@@ -37,6 +37,11 @@ export interface EnvironmentConfig {
 }
 
 export function detectEnvironment(): Environment {
+  // Check for explicit environment override
+  if (process.env.FORCE_AWS_ENVIRONMENT === 'true') {
+    return Environment.APP_RUNNER
+  }
+  
   // Check if running in App Runner
   if (process.env.AWS_EXECUTION_ENV?.includes('AWS_ECS_FARGATE')) {
     return Environment.APP_RUNNER
@@ -118,8 +123,8 @@ export function getEnvironmentConfig(): EnvironmentConfig {
         },
         redis: {
           host: process.env.REDIS_ENDPOINT || 'localhost',
-          port: 6379,
-          tls: true
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          tls: process.env.REDIS_TLS !== 'false' // Default to TLS for real AWS
         }
       }
       

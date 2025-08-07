@@ -15,14 +15,24 @@
     "test:job-service": "vitest --run lib/job-service.test.ts",
     "view:jobs": "tsx scripts/view-jobs.ts",
     "test:connectivity": "tsx scripts/test-connectivity.ts",
+    "test:aws-connectivity": "tsx scripts/test-aws-connectivity.ts",
+    "setup:aws-resources": "tsx scripts/setup-aws-resources.ts",
+    "check:aws-resources": "tsx scripts/check-aws-resources.ts",
+    "create:redis-cluster": "tsx scripts/create-redis-cluster.ts",
+    "set:redis-endpoint": "tsx scripts/set-redis-endpoint.ts",
+    "switch:env": "tsx scripts/switch-environment.ts",
     "inspect:services": "tsx scripts/inspect-services.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.490.0",
+    "@aws-sdk/client-elasticache": "^3.862.0",
+    "@aws-sdk/client-iam": "^3.862.0",
     "@aws-sdk/client-s3": "^3.490.0",
+    "@aws-sdk/client-sts": "^3.862.0",
     "@aws-sdk/util-dynamodb": "^3.490.0",
     "@ffmpeg/ffmpeg": "^0.12.7",
     "@ffmpeg/util": "^0.12.1",
+    "dotenv": "^17.2.1",
     "next": "^15.3.5",
     "react": "^18",
     "react-dom": "^18",
@@ -33,6 +43,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@vitest/ui": "^1.2.0",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "^15.3.5",
@@ -40,7 +51,6 @@
     "tailwindcss": "^3.3.0",
     "tsx": "^4.7.0",
     "typescript": "^5",
-    "vitest": "^1.2.0",
-    "@vitest/ui": "^1.2.0"
+    "vitest": "^1.2.0"
   }
 }

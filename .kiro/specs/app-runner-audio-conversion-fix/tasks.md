@@ -41,7 +41,7 @@
   - View job records in DynamoDB LocalStack dashboard with proper TTL timestamps
   - See detailed logs for all job operations in the console output
 
-- [ ] 3. Create real AWS resources and validate connectivity
+- [x] 3. Create real AWS resources and validate connectivity
 
   - Set up real S3 bucket with proper CORS policies and folder structure (uploads/, conversions/)
   - Create real DynamoDB table 'audio-conversion-jobs' with TTL and proper indexes
