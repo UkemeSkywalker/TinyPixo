@@ -366,4 +366,3 @@ Component Interactions:
 4. Real-time progress tracking for audio/video conversion
 5. Processed media is returned to client
 6. Preview components display results
-7. Download functionality delivers processed media
