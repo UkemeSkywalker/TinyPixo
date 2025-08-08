@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Test - Task 5 Validation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fafafa;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #555;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .progress {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #28a745;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .file-info {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Task 5 Upload Validation Tests</h1>
+        <p>This page tests the upload functionality from a browser environment to validate Task 5 requirements.</p>
+
+        <!-- Test 1: Form Upload -->
+        <div class="test-section">
+            <h3>Test 1: Form Upload (Small File)</h3>
+            <p>Upload a small audio file using form data.</p>
+            <input type="file" id="formFile" accept="audio/*">
+            <div class="file-info" id="formFileInfo" style="display: none;"></div>
+            <button onclick="testFormUpload()">Upload via Form</button>
+            <div class="progress" id="formProgress">
+                <div class="progress-bar" id="formProgressBar"></div>
+            </div>
+            <div class="result" id="formResult"></div>
+        </div>
+
+        <!-- Test 2: Large File Upload -->
+        <div class="test-section">
+            <h3>Test 2: Large File Upload (Multipart)</h3>
+            <p>Upload a large audio file (>5MB) to test multipart upload.</p>
+            <input type="file" id="largeFile" accept="audio/*">
+            <div class="file-info" id="largeFileInfo" style="display: none;"></div>
+            <button onclick="testLargeFileUpload()">Upload Large File</button>
+            <div class="progress" id="largeProgress">
+                <div class="progress-bar" id="largeProgressBar"></div>
+            </div>
+            <div class="result" id="largeResult"></div>
+        </div>
+
+        <!-- Test 3: Chunked Upload -->
+        <div class="test-section">
+            <h3>Test 3: Chunked Upload</h3>
+            <p>Upload a file using the chunked upload API with progress tracking.</p>
+            <input type="file" id="chunkedFile" accept="audio/*">
+            <div class="file-info" id="chunkedFileInfo" style="display: none;"></div>
+            <button onclick="testChunkedUpload()">Upload via Chunks</button>
+            <div class="progress" id="chunkedProgress">
+                <div class="progress-bar" id="chunkedProgressBar"></div>
+            </div>
+            <div class="result" id="chunkedResult"></div>
+        </div>
+
+        <!-- Test 4: Invalid File Types -->
+        <div class="test-section">
+            <h3>Test 4: Invalid File Type Validation</h3>
+            <p>Try uploading non-audio files to test validation.</p>
+            <input type="file" id="invalidFile">
+            <div class="file-info" id="invalidFileInfo" style="display: none;"></div>
+            <button onclick="testInvalidFile()">Upload Invalid File</button>
+            <div class="result" id="invalidResult"></div>
+        </div>
+
+        <!-- Test 5: Generate Test Files -->
+        <div class="test-section">
+            <h3>Test 5: Generate Test Files</h3>
+            <p>Generate test audio files of different sizes for testing.</p>
+            <button onclick="generateSmallFile()">Generate 1MB MP3</button>
+            <button onclick="generateLargeFile()">Generate 10MB WAV</button>
+            <button onclick="generateHugeFile()">Generate 50MB AAC</button>
+            <div class="result" id="generateResult"></div>
+        </div>
+    </div>
+
+    <script>
+        // Utility functions
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `result ${type}`;
+            element.style.display = 'block';
+        }
+
+        function showProgress(progressId, percent) {
+            const progress = document.getElementById(progressId);
+            const progressBar = document.getElementById(progressId.replace('Progress', 'ProgressBar'));
+            progress.style.display = 'block';
+            progressBar.style.width = percent + '%';
+        }
+
+        function hideProgress(progressId) {
+            document.getElementById(progressId).style.display = 'none';
+        }
+
+        function showFileInfo(fileInfoId, file) {
+            const element = document.getElementById(fileInfoId);
+            element.innerHTML = `
+                <strong>File:</strong> ${file.name}<br>
+                <strong>Size:</strong> ${(file.size / 1024 / 1024).toFixed(2)} MB<br>
+                <strong>Type:</strong> ${file.type}
+            `;
+            element.style.display = 'block';
+        }
+
+        // File input change handlers
+        document.getElementById('formFile').addEventListener('change', function(e) {
+            if (e.target.files[0]) showFileInfo('formFileInfo', e.target.files[0]);
+        });
+
+        document.getElementById('largeFile').addEventListener('change', function(e) {
+            if (e.target.files[0]) showFileInfo('largeFileInfo', e.target.files[0]);
+        });
+
+        document.getElementById('chunkedFile').addEventListener('change', function(e) {
+            if (e.target.files[0]) showFileInfo('chunkedFileInfo', e.target.files[0]);
+        });
+
+        document.getElementById('invalidFile').addEventListener('change', function(e) {
+            if (e.target.files[0]) showFileInfo('invalidFileInfo', e.target.files[0]);
+        });
+
+        // Test 1: Form Upload
+        async function testFormUpload() {
+            const fileInput = document.getElementById('formFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('formResult', 'Please select a file first.', 'error');
+                return;
+            }
+
+            showProgress('formProgress', 0);
+            showResult('formResult', 'Uploading file...', 'info');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideProgress('formProgress');
+
+                if (response.ok && result.success) {
+                    showResult('formResult', 
+                        `✅ Upload successful!\n` +
+                        `File ID: ${result.fileId}\n` +
+                        `File Name: ${result.fileName}\n` +
+                        `Size: ${result.size} bytes\n` +
+                        `S3 Location: ${result.s3Location.bucket}/${result.s3Location.key}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('formResult', 
+                        `❌ Upload failed (${response.status})\n` +
+                        `Error: ${result.error || 'Unknown error'}\n` +
+                        `Details: ${result.details || 'No details'}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                hideProgress('formProgress');
+                showResult('formResult', `❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 2: Large File Upload
+        async function testLargeFileUpload() {
+            const fileInput = document.getElementById('largeFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('largeResult', 'Please select a file first.', 'error');
+                return;
+            }
+
+            if (file.size < 5 * 1024 * 1024) {
+                showResult('largeResult', 'Please select a file larger than 5MB to test multipart upload.', 'error');
+                return;
+            }
+
+            showProgress('largeProgress', 0);
+            showResult('largeResult', 'Uploading large file (this may take a while)...', 'info');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                hideProgress('largeProgress');
+
+                if (response.ok && result.success) {
+                    showResult('largeResult', 
+                        `✅ Large file upload successful!\n` +
+                        `File ID: ${result.fileId}\n` +
+                        `File Name: ${result.fileName}\n` +
+                        `Size: ${(result.size / 1024 / 1024).toFixed(2)} MB\n` +
+                        `S3 Location: ${result.s3Location.bucket}/${result.s3Location.key}\n` +
+                        `Note: This used multipart upload for files >5MB`, 
+                        'success'
+                    );
+                } else {
+                    showResult('largeResult', 
+                        `❌ Large file upload failed (${response.status})\n` +
+                        `Error: ${result.error || 'Unknown error'}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                hideProgress('largeProgress');
+                showResult('largeResult', `❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 3: Chunked Upload
+        async function testChunkedUpload() {
+            const fileInput = document.getElementById('chunkedFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('chunkedResult', 'Please select a file first.', 'error');
+                return;
+            }
+
+            showProgress('chunkedProgress', 0);
+            showResult('chunkedResult', 'Starting chunked upload...', 'info');
+
+            try {
+                // Step 1: Initiate upload
+                let response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'initiate',
+                        fileName: file.name,
+                        fileSize: file.size
+                    })
+                });
+
+                let result = await response.json();
+                
+                if (!response.ok || !result.success) {
+                    showResult('chunkedResult', `❌ Failed to initiate upload: ${result.error}`, 'error');
+                    return;
+                }
+
+                const fileId = result.fileId;
+                const chunkSize = result.chunkSize;
+                const totalChunks = result.totalChunks;
+
+                showResult('chunkedResult', 
+                    `Upload initiated!\n` +
+                    `File ID: ${fileId}\n` +
+                    `Total chunks: ${totalChunks}\n` +
+                    `Chunk size: ${(chunkSize / 1024 / 1024).toFixed(2)} MB\n\n` +
+                    `Uploading chunks...`, 
+                    'info'
+                );
+
+                // Step 2: Upload chunks
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * chunkSize;
+                    const end = Math.min(start + chunkSize, file.size);
+                    const chunk = file.slice(start, end);
+                    
+                    // Convert chunk to base64
+                    const chunkBuffer = await chunk.arrayBuffer();
+                    const chunkBase64 = btoa(String.fromCharCode(...new Uint8Array(chunkBuffer)));
+
+                    response = await fetch('/api/upload-audio', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'upload',
+                            fileId: fileId,
+                            chunkIndex: i,
+                            totalChunks: totalChunks,
+                            chunk: chunkBase64
+                        })
+                    });
+
+                    result = await response.json();
+                    
+                    if (!response.ok || !result.success) {
+                        showResult('chunkedResult', `❌ Failed to upload chunk ${i + 1}: ${result.error}`, 'error');
+                        return;
+                    }
+
+                    const progress = Math.round(((i + 1) / totalChunks) * 100);
+                    showProgress('chunkedProgress', progress);
+                    
+                    showResult('chunkedResult', 
+                        `Upload initiated!\n` +
+                        `File ID: ${fileId}\n` +
+                        `Total chunks: ${totalChunks}\n\n` +
+                        `Uploading chunks... ${i + 1}/${totalChunks} (${result.progress}%)`, 
+                        'info'
+                    );
+                }
+
+                // Step 3: Complete upload
+                response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'complete',
+                        fileId: fileId
+                    })
+                });
+
+                result = await response.json();
+                hideProgress('chunkedProgress');
+
+                if (response.ok && result.success) {
+                    showResult('chunkedResult', 
+                        `✅ Chunked upload completed successfully!\n` +
+                        `File ID: ${result.fileId}\n` +
+                        `File Name: ${result.fileName}\n` +
+                        `Size: ${(result.size / 1024 / 1024).toFixed(2)} MB\n` +
+                        `S3 Location: ${result.s3Location.bucket}/${result.s3Location.key}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('chunkedResult', `❌ Failed to complete upload: ${result.error}`, 'error');
+                }
+
+            } catch (error) {
+                hideProgress('chunkedProgress');
+                showResult('chunkedResult', `❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Test 4: Invalid File Upload
+        async function testInvalidFile() {
+            const fileInput = document.getElementById('invalidFile');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showResult('invalidResult', 'Please select a file first.', 'error');
+                return;
+            }
+
+            showResult('invalidResult', 'Testing invalid file upload...', 'info');
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch('/api/upload-audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.status === 400 && result.error) {
+                    showResult('invalidResult', 
+                        `✅ Validation working correctly!\n` +
+                        `File was rejected as expected.\n` +
+                        `Error: ${result.error}`, 
+                        'success'
+                    );
+                } else if (response.ok) {
+                    showResult('invalidResult', 
+                        `❌ Validation failed!\n` +
+                        `Invalid file was accepted when it should have been rejected.\n` +
+                        `File: ${file.name} (${file.type})`, 
+                        'error'
+                    );
+                } else {
+                    showResult('invalidResult', 
+                        `❓ Unexpected response (${response.status})\n` +
+                        `Error: ${result.error || 'Unknown error'}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('invalidResult', `❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        // Generate test files
+        function generateSmallFile() {
+            const size = 1024 * 1024; // 1MB
+            const data = new Uint8Array(size);
+            for (let i = 0; i < size; i++) {
+                data[i] = Math.floor(Math.random() * 256);
+            }
+            const blob = new Blob([data], { type: 'audio/mpeg' });
+            downloadBlob(blob, 'test-1mb.mp3');
+            showResult('generateResult', '✅ Generated 1MB MP3 test file', 'success');
+        }
+
+        function generateLargeFile() {
+            const size = 10 * 1024 * 1024; // 10MB
+            const data = new Uint8Array(size);
+            for (let i = 0; i < size; i++) {
+                data[i] = Math.floor(Math.random() * 256);
+            }
+            const blob = new Blob([data], { type: 'audio/wav' });
+            downloadBlob(blob, 'test-10mb.wav');
+            showResult('generateResult', '✅ Generated 10MB WAV test file', 'success');
+        }
+
+        function generateHugeFile() {
+            showResult('generateResult', 'Generating 50MB file... (this may take a moment)', 'info');
+            setTimeout(() => {
+                const size = 50 * 1024 * 1024; // 50MB
+                const data = new Uint8Array(size);
+                for (let i = 0; i < size; i++) {
+                    data[i] = Math.floor(Math.random() * 256);
+                }
+                const blob = new Blob([data], { type: 'audio/aac' });
+                downloadBlob(blob, 'test-50mb.aac');
+                showResult('generateResult', '✅ Generated 50MB AAC test file', 'success');
+            }, 100);
+        }
+
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
