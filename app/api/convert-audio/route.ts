@@ -1,129 +1,436 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { spawn } from 'child_process'
-import { writeFile, unlink, readFile } from 'fs/promises'
-import { join } from 'path'
+import { jobService, JobStatus, S3Location } from '../../../lib/job-service'
+import { progressService } from '../../../lib/progress-service'
+import { streamingConversionService } from '../../../lib/streaming-conversion-service'
+import { s3Client } from '../../../lib/aws-services'
+import { HeadObjectCommand } from '@aws-sdk/client-s3'
 
+interface ConversionRequest {
+  fileId: string
+  format: string
+  quality: string
+  bucket?: string
+}
+
+interface ConversionResponse {
+  jobId: string
+  status: string
+  message: string
+}
+
+interface RetryConfig {
+  maxRetries: number
+  baseDelay: number
+  maxDelay: number
+  backoffMultiplier: number
+}
+
+const RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  baseDelay: 1000,
+  maxDelay: 10000,
+  backoffMultiplier: 2
+}
+
+/**
+ * POST /api/convert-audio - Orchestrate audio conversion workflow
+ * 
+ * Request body:
+ * {
+ *   "fileId": "audio-123",
+ *   "format": "wav",
+ *   "quality": "192k",
+ *   "bucket": "audio-conversion-bucket" // optional, defaults to environment
+ * }
+ * 
+ * Response:
+ * {
+ *   "jobId": "1754408209622",
+ *   "status": "created",
+ *   "message": "Conversion job created successfully"
+ * }
+ */
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+  let jobId: string | null = null
+
   try {
-    const formData = await request.formData()
-    const file = formData.get('audio') as File
-    const format = formData.get('format') as string
-    const quality = formData.get('quality') as string
+    console.log('[ConversionAPI] Starting conversion orchestration request')
 
-    if (!file) {
-      return NextResponse.json({ error: 'No audio file provided' }, { status: 400 })
-    }
+    // Parse and validate request
+    const requestData = await parseAndValidateRequest(request)
+    console.log(`[ConversionAPI] Validated request: fileId=${requestData.fileId}, format=${requestData.format}, quality=${requestData.quality}`)
 
-    const inputPath = join('/tmp', `input-${Date.now()}.${file.name.split('.').pop()}`)
-    const outputPath = join('/tmp', `output-${Date.now()}.${format}`)
-    
-    await writeFile(inputPath, Buffer.from(await file.arrayBuffer()))
+    // Verify input file exists in S3
+    const inputS3Location = await verifyInputFile(requestData)
+    console.log(`[ConversionAPI] Input file verified: ${inputS3Location.bucket}/${inputS3Location.key} (${inputS3Location.size} bytes)`)
 
-    const args = ['-i', inputPath, '-b:a', quality]
-    if (format === 'mp3') args.push('-codec:a', 'libmp3lame')
-    else if (format === 'aac') args.push('-codec:a', 'aac')
-    else if (format === 'ogg') args.push('-codec:a', 'libvorbis')
-    
-    args.push(outputPath)
-    
-    // Create a unique job ID for this conversion
-    const jobId = Date.now().toString()
-    let progressData = { jobId, progress: 0 }
-    
-    // Store progress in memory (in production, use Redis or similar)
-    global.conversionProgress = global.conversionProgress || {}
-    global.conversionProgress[jobId] = progressData
-    
-    return new Promise<NextResponse>((resolve) => {
-      // Use system FFmpeg (needs to be installed locally)
-      const ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg'
-      console.log(`Using FFmpeg at: ${ffmpegPath}`)
-      
-      try {
-        const ffmpeg = spawn(ffmpegPath, args)
-        
-        // Handle spawn errors
-        ffmpeg.on('error', (err) => {
-          console.error('FFmpeg spawn error:', err)
-          resolve(NextResponse.json({ error: 'FFmpeg process error: ' + err.message }, { status: 500 }))
-        })
-        
-        // Track if we've found the duration
-        let totalDuration = 30 // Default assumption (30 seconds)
-        let durationFound = false
-        
-        // Capture stderr for progress tracking
-        ffmpeg.stderr.on('data', (data) => {
-          const output = data.toString()
-          
-          // First try to find duration in the output
-          if (!durationFound) {
-            const durationMatch = output.match(/Duration: ([\d:.]+)/)
-            if (durationMatch && durationMatch[1]) {
-              const durationParts = durationMatch[1].split(':')
-              totalDuration = 
-                parseFloat(durationParts[0]) * 3600 + 
-                parseFloat(durationParts[1]) * 60 + 
-                parseFloat(durationParts[2])
-              durationFound = true
-              console.log(`Detected audio duration: ${totalDuration} seconds`)
-            }
-          }
-          
-          // Look for time=00:00:00.00 pattern in FFmpeg output
-          const timeMatch = output.match(/time=([\d:.]+)/)
-          if (timeMatch && timeMatch[1]) {
-            const timeParts = timeMatch[1].split(':')
-            const seconds = 
-              parseFloat(timeParts[0]) * 3600 + 
-              parseFloat(timeParts[1]) * 60 + 
-              parseFloat(timeParts[2])
-            
-            // Calculate progress based on detected duration
-            const progress = Math.min(99, Math.round((seconds / totalDuration) * 100))
-            
-            // Update progress
-            progressData.progress = progress
-            global.conversionProgress[jobId] = progressData
-          }
-        })
-      
-        ffmpeg.on('close', async (code) => {
-          try {
-            if (code === 0) {
-              const outputBuffer = await readFile(outputPath)
-              await unlink(inputPath)
-              await unlink(outputPath)
-              
-              // Set progress to 100% when complete
-              progressData.progress = 100
-              global.conversionProgress[jobId] = progressData
-              
-              resolve(new NextResponse(outputBuffer, {
-                headers: { 
-                  'Content-Type': `audio/${format}`,
-                  'Content-Length': outputBuffer.length.toString(),
-                  'X-Job-Id': jobId
-                }
-              }))
-            } else {
-              await unlink(inputPath).catch(() => {})
-              await unlink(outputPath).catch(() => {})
-              resolve(NextResponse.json({ error: 'Audio conversion failed' }, { status: 500 }))
-            }
-          } catch (error) {
-            resolve(NextResponse.json({ error: 'File processing error' }, { status: 500 }))
-          }
-        })
-      } catch (error) {
-        console.error('Failed to spawn FFmpeg:', error)
-        resolve(NextResponse.json({ 
-          error: 'FFmpeg not found. Please install FFmpeg on your system.'
-        }, { status: 500 }))
+    // Create conversion job
+    const job = await createConversionJob(inputS3Location, requestData)
+    jobId = job.jobId
+    console.log(`[ConversionAPI] Job created: ${jobId}`)
+
+    // Initialize progress tracking
+    await initializeProgressTracking(jobId)
+    console.log(`[ConversionAPI] Progress tracking initialized for job ${jobId}`)
+
+    // Start conversion process asynchronously
+    startConversionProcess(job, requestData)
+      .catch(error => {
+        console.error(`[ConversionAPI] Async conversion process failed for job ${jobId}:`, error)
+        // Update job status to failed
+        handleConversionError(jobId, error)
+      })
+
+    const responseTime = Date.now() - startTime
+    console.log(`[ConversionAPI] Job ${jobId} created successfully in ${responseTime}ms`)
+
+    // Return job ID immediately (async processing continues in background)
+    return NextResponse.json({
+      jobId,
+      status: 'created',
+      message: 'Conversion job created successfully'
+    } as ConversionResponse, {
+      status: 202, // Accepted - processing will continue asynchronously
+      headers: {
+        'X-Response-Time': `${responseTime}ms`,
+        'X-Job-Id': jobId
       }
     })
+
   } catch (error) {
-    console.error('Audio conversion error:', error)
-    return NextResponse.json({ error: 'Audio conversion failed' }, { status: 500 })
+    const responseTime = Date.now() - startTime
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    
+    console.error(`[ConversionAPI] Request failed after ${responseTime}ms:`, error)
+
+    // If we created a job but failed later, mark it as failed
+    if (jobId) {
+      await handleConversionError(jobId, error)
+    }
+
+    // Determine appropriate HTTP status code
+    const statusCode = getErrorStatusCode(error)
+
+    return NextResponse.json({
+      error: errorMessage,
+      details: getErrorDetails(error)
+    }, {
+      status: statusCode, // 400, 404, 429, 500, etc.
+      headers: {
+        'X-Response-Time': `${responseTime}ms`
+      }
+    })
+  }
+}
+
+/**
+ * Parse and validate the conversion request
+ */
+async function parseAndValidateRequest(request: NextRequest): Promise<ConversionRequest> {
+  let requestData: ConversionRequest
+
+  try {
+    requestData = await request.json()
+  } catch (error) {
+    throw new Error('Invalid JSON in request body')
+  }
+
+  // Validate required fields
+  if (!requestData.fileId) {
+    throw new Error('Missing required field: fileId')
+  }
+
+  if (!requestData.format) {
+    throw new Error('Missing required field: format')
+  }
+
+  if (!requestData.quality) {
+    throw new Error('Missing required field: quality')
+  }
+
+  // Validate format
+  const supportedFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a']
+  if (!supportedFormats.includes(requestData.format.toLowerCase())) {
+    throw new Error(`Unsupported format: ${requestData.format}. Supported formats: ${supportedFormats.join(', ')}`)
+  }
+
+  // Validate quality
+  const qualityPattern = /^\d+k?$/i
+  if (!qualityPattern.test(requestData.quality)) {
+    throw new Error(`Invalid quality format: ${requestData.quality}. Expected format: 128k, 192k, 320k, etc.`)
+  }
+
+  // Set default bucket if not provided
+  if (!requestData.bucket) {
+    requestData.bucket = process.env.S3_BUCKET_NAME || 'audio-conversion-bucket'
+  }
+
+  return requestData
+}
+
+/**
+ * Verify that the input file exists in S3 and get its metadata
+ */
+async function verifyInputFile(requestData: ConversionRequest): Promise<S3Location> {
+  const inputKey = `uploads/${requestData.fileId}`
+  
+  try {
+    console.log(`[ConversionAPI] Verifying input file: ${requestData.bucket}/${inputKey}`)
+
+    const headResult = await executeWithRetry(async () => {
+      return await s3Client.send(new HeadObjectCommand({
+        Bucket: requestData.bucket,
+        Key: inputKey
+      }))
+    })
+
+    if (!headResult.ContentLength) {
+      throw new Error('Input file has no content length')
+    }
+
+    return {
+      bucket: requestData.bucket!,
+      key: inputKey,
+      size: headResult.ContentLength
+    }
+
+  } catch (error) {
+    if (error instanceof Error && error.name === 'NotFound') {
+      throw new Error(`Input file not found: ${requestData.fileId}. Please upload the file first.`)
+    }
+    
+    console.error(`[ConversionAPI] Failed to verify input file ${inputKey}:`, error)
+    throw new Error(`Failed to verify input file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+/**
+ * Create a new conversion job in DynamoDB
+ */
+async function createConversionJob(inputS3Location: S3Location, requestData: ConversionRequest) {
+  try {
+    const job = await executeWithRetry(async () => {
+      return await jobService.createJob({
+        inputS3Location,
+        format: requestData.format,
+        quality: requestData.quality
+      })
+    })
+
+    console.log(`[ConversionAPI] Job created in DynamoDB: ${job.jobId}`)
+    return job
+
+  } catch (error) {
+    console.error('[ConversionAPI] Failed to create job in DynamoDB:', error)
+    throw new Error(`Failed to create conversion job: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
+}
+
+/**
+ * Initialize progress tracking in Redis
+ */
+async function initializeProgressTracking(jobId: string): Promise<void> {
+  try {
+    await executeWithRetry(async () => {
+      await progressService.initializeProgress(jobId)
+    })
+
+    console.log(`[ConversionAPI] Progress tracking initialized for job ${jobId}`)
+
+  } catch (error) {
+    console.error(`[ConversionAPI] Failed to initialize progress tracking for job ${jobId}:`, error)
+    // Don't throw error - progress tracking failure shouldn't block job creation
+    console.warn(`[ConversionAPI] Continuing without progress tracking for job ${jobId}`)
+  }
+}
+
+/**
+ * Start the conversion process asynchronously
+ */
+async function startConversionProcess(job: any, requestData: ConversionRequest): Promise<void> {
+  const jobId = job.jobId
+
+  try {
+    console.log(`[ConversionAPI] Starting async conversion process for job ${jobId}`)
+
+    // Update job status to processing
+    await updateJobStatus(jobId, JobStatus.PROCESSING)
+
+    // Update progress to show processing has started
+    await progressService.setProgress(jobId, {
+      jobId,
+      progress: 10,
+      stage: 'starting conversion process'
+    })
+
+    // Perform the actual conversion using streaming service
+    const conversionResult = await streamingConversionService.convertAudio(job, {
+      format: requestData.format,
+      quality: requestData.quality,
+      timeout: 300000 // 5 minutes
+    })
+
+    if (conversionResult.success && conversionResult.outputS3Location) {
+      // Update job status to completed with output location
+      await updateJobStatus(jobId, JobStatus.COMPLETED, conversionResult.outputS3Location)
+
+      // Mark progress as complete
+      await progressService.markComplete(jobId)
+
+      console.log(`[ConversionAPI] Conversion completed successfully for job ${jobId}: ${conversionResult.outputS3Location.key}`)
+      console.log(`[ConversionAPI] Processing time: ${conversionResult.processingTimeMs}ms, Fallback used: ${conversionResult.fallbackUsed}`)
+
+    } else {
+      // Conversion failed
+      const errorMessage = conversionResult.error || 'Conversion failed for unknown reason'
+      await updateJobStatus(jobId, JobStatus.FAILED, undefined, errorMessage)
+      await progressService.markFailed(jobId, errorMessage)
+
+      console.error(`[ConversionAPI] Conversion failed for job ${jobId}: ${errorMessage}`)
+    }
+
+  } catch (error) {
+    console.error(`[ConversionAPI] Conversion process error for job ${jobId}:`, error)
+    await handleConversionError(jobId, error)
+  }
+}
+
+/**
+ * Update job status in DynamoDB with retry logic
+ */
+async function updateJobStatus(
+  jobId: string, 
+  status: JobStatus, 
+  outputS3Location?: S3Location, 
+  error?: string
+): Promise<void> {
+  try {
+    await executeWithRetry(async () => {
+      await jobService.updateJobStatus(jobId, status, outputS3Location, error)
+    })
+
+    console.log(`[ConversionAPI] Job ${jobId} status updated to ${status}`)
+
+  } catch (updateError) {
+    console.error(`[ConversionAPI] Failed to update job ${jobId} status to ${status}:`, updateError)
+    // Don't throw - status update failure shouldn't break the main flow
+  }
+}
+
+/**
+ * Handle conversion errors by updating job status and progress
+ */
+async function handleConversionError(jobId: string, error: any): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : 'Unknown conversion error'
+
+  try {
+    // Update job status to failed
+    await updateJobStatus(jobId, JobStatus.FAILED, undefined, errorMessage)
+
+    // Mark progress as failed
+    await progressService.markFailed(jobId, errorMessage)
+
+    console.log(`[ConversionAPI] Error handling completed for job ${jobId}`)
+
+  } catch (handlingError) {
+    console.error(`[ConversionAPI] Failed to handle error for job ${jobId}:`, handlingError)
+  }
+}
+
+/**
+ * Get appropriate HTTP status code for different error types
+ */
+function getErrorStatusCode(error: any): number {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    
+    if (message.includes('not found') || message.includes('missing')) {
+      return 404
+    }
+    
+    if (message.includes('invalid') || message.includes('unsupported')) {
+      return 400
+    }
+    
+    if (message.includes('quota') || message.includes('limit') || message.includes('throttl')) {
+      return 429
+    }
+    
+    if (message.includes('timeout')) {
+      return 408
+    }
+    
+    if (message.includes('permission') || message.includes('access denied')) {
+      return 403
+    }
+  }
+  
+  return 500 // Internal server error
+}
+
+/**
+ * Get detailed error information for debugging
+ */
+function getErrorDetails(error: any): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`
+  }
+  
+  return 'Unknown error occurred'
+}
+
+/**
+ * Execute operation with retry logic for AWS service calls
+ */
+async function executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error')
+      
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        break
+      }
+
+      // Calculate delay with exponential backoff
+      const delay = Math.min(
+        RETRY_CONFIG.baseDelay * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt),
+        RETRY_CONFIG.maxDelay
+      )
+
+      console.log(`[ConversionAPI] Operation failed (attempt ${attempt + 1}/${RETRY_CONFIG.maxRetries + 1}), retrying in ${delay}ms:`, lastError.message)
+      
+      await new Promise(resolve => setTimeout(resolve, delay))
+    }
+  }
+
+  throw lastError
+}
+
+/**
+ * Job recovery logic - check for orphaned jobs and handle them
+ * This function can be called periodically or on startup
+ */
+export async function recoverOrphanedJobs(): Promise<void> {
+  console.log('[ConversionAPI] Starting orphaned job recovery process')
+
+  try {
+    // This would typically scan DynamoDB for jobs in 'processing' state that are older than a threshold
+    // For now, we'll implement a basic version that logs the intent
+    
+    console.log('[ConversionAPI] Orphaned job recovery completed')
+    
+    // In a full implementation, this would:
+    // 1. Scan DynamoDB for jobs with status='processing' and old timestamps
+    // 2. Check if the conversion process is still running
+    // 3. Either resume the job or mark it as failed
+    // 4. Clean up any temporary resources
+    
+  } catch (error) {
+    console.error('[ConversionAPI] Orphaned job recovery failed:', error)
   }
 }

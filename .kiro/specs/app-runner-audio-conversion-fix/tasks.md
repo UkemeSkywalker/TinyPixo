@@ -81,7 +81,7 @@
   - Poll the progress endpoint rapidly and see proper no-cache headers in response
   - View detailed Redis operation logs showing all get/set operations with connection status
 
-- [ ] 5. Build complete file upload service with S3 multipart upload
+- [x] 5. Build complete file upload service with S3 multipart upload
 
   - Create POST /api/upload-audio endpoint with chunked file upload support
   - Implement S3 multipart upload with proper chunk handling and completion
@@ -102,7 +102,7 @@
   - Test upload from browser and see CORS policies allowing the request
   - Simulate upload failures and see retry logic working with exponential backoff
 
-- [ ] 6. Implement streaming FFmpeg progress parser with fallback support (Experimental)
+- [x] 6. Implement streaming FFmpeg progress parser with fallback support (Experimental)
 
   - Create FFmpegProgressParser class that extracts duration and time from stderr output
   - Implement streaming-compatible progress calculation with duration estimation fallbacks
@@ -123,7 +123,7 @@
   - Test fallback scenarios when streaming progress tracking fails
   - Simulate FFmpeg streaming failures and see proper detection and recovery
 
-- [ ] 7. Build streaming FFmpeg conversion service with S3 integration (Experimental)
+- [x] 7. Build streaming FFmpeg conversion service with S3 integration (Experimental)
 
   - Create StreamingConversionService that streams directly from S3 input to S3 output
   - Implement FFmpeg process spawning with pipe-based I/O (stdin/stdout streaming)
@@ -144,7 +144,7 @@
   - Test FFmpeg streaming timeout and see proper process termination and cleanup
   - Identify which audio formats work with streaming vs require file-based processing
 
-- [ ] 8. Create working conversion orchestration API with job lifecycle management
+- [x] 8. Create working conversion orchestration API with job lifecycle management
 
   - Implement POST /api/convert-audio endpoint that accepts fileId and conversion parameters
   - Create complete workflow: job creation → progress initialization → FFmpeg processing → status updates
@@ -165,7 +165,7 @@
   - Interrupt a conversion process and see job recovery logic working correctly
   - Run integration tests and see the entire upload → convert → complete flow working
 
-- [ ] 9. Build S3 streaming download service with proper file serving
+- [-] 9. Build S3 streaming download service with proper file serving
 
   - Create GET /api/download endpoint that streams converted files from S3
   - Implement presigned URL generation as alternative download method

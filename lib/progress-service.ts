@@ -1,6 +1,7 @@
 import { RedisClientType } from 'redis'
 import { getRedisClient } from './aws-services'
 import { jobService, Job } from './job-service'
+import { ffmpegProgressParser, FFmpegProcessInfo, FFmpegProgressInfo } from './ffmpeg-progress-parser'
 
 export interface ProgressData {
   jobId: string
@@ -182,6 +183,112 @@ export class ProgressService {
 
     console.log(`[ProgressService] Marking job ${jobId} as failed: ${error}`)
     await this.setProgress(jobId, failedProgress)
+  }
+
+  /**
+   * Process FFmpeg stderr line and update progress if needed
+   */
+  async processFFmpegStderr(
+    jobId: string,
+    stderrLine: string,
+    processInfo: FFmpegProcessInfo,
+    fallbackFileSize?: number
+  ): Promise<void> {
+    try {
+      // Parse the stderr line
+      const progressInfo = ffmpegProgressParser.parseStderr(stderrLine, processInfo)
+      
+      if (!progressInfo) {
+        return // No progress information in this line
+      }
+
+      // Store duration information if found (don't throttle duration updates)
+      if (progressInfo.duration && !processInfo.estimatedDuration) {
+        processInfo.estimatedDuration = progressInfo.duration
+        console.log(`[ProgressService] Duration detected for job ${jobId}: ${progressInfo.duration}s`)
+      }
+
+      // For progress updates with currentTime, check throttling
+      if (progressInfo.currentTime !== undefined) {
+        // For streaming conversions, be less aggressive with throttling to capture more updates
+        const shouldUpdate = processInfo.isStreaming ? 
+          (Date.now() - processInfo.lastProgressTime) >= 25 : // 25ms for streaming
+          ffmpegProgressParser.shouldUpdateProgress(processInfo) // Normal throttling for file-based
+
+        if (!shouldUpdate) {
+          return
+        }
+
+        // Calculate progress with fallback strategies
+        const progressData = ffmpegProgressParser.calculateProgress(
+          progressInfo,
+          processInfo,
+          fallbackFileSize
+        )
+
+        // Update the jobId to match the actual job
+        progressData.jobId = jobId
+
+        // Store progress in Redis
+        await this.setProgress(jobId, progressData)
+
+        console.log(`[ProgressService] FFmpeg progress updated for job ${jobId}: ${progressData.progress}% (${progressData.stage})`)
+      }
+    } catch (error) {
+      console.error(`[ProgressService] Failed to process FFmpeg stderr for job ${jobId}:`, error)
+      // Don't throw - progress tracking should not break the conversion process
+    }
+  }
+
+  /**
+   * Initialize FFmpeg process info for progress tracking
+   */
+  createFFmpegProcessInfo(
+    pid: number,
+    inputFormat: string,
+    outputFormat: string,
+    isStreaming: boolean = false
+  ): FFmpegProcessInfo {
+    return {
+      pid,
+      startTime: Date.now(),
+      lastProgressTime: Date.now(),
+      isStreaming,
+      inputFormat,
+      outputFormat
+    }
+  }
+
+  /**
+   * Check if FFmpeg process has timed out
+   */
+  checkFFmpegTimeout(processInfo: FFmpegProcessInfo): boolean {
+    return ffmpegProgressParser.detectTimeout(processInfo)
+  }
+
+  /**
+   * Check streaming compatibility for given formats
+   */
+  checkStreamingCompatibility(inputFormat: string, outputFormat: string): {
+    supportsStreaming: boolean
+    reason?: string
+    fallbackRecommended: boolean
+  } {
+    return ffmpegProgressParser.checkStreamingCompatibility(inputFormat, outputFormat)
+  }
+
+  /**
+   * Get format compatibility information
+   */
+  getFormatCompatibility(format: string) {
+    return ffmpegProgressParser.getFormatCompatibility(format)
+  }
+
+  /**
+   * Get all supported formats
+   */
+  getSupportedFormats() {
+    return ffmpegProgressParser.getSupportedFormats()
   }
 
   /**
