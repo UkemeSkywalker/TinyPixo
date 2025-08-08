@@ -3,7 +3,7 @@ import { jobService, JobStatus, S3Location } from '../../../lib/job-service'
 import { progressService } from '../../../lib/progress-service'
 import { streamingConversionService } from '../../../lib/streaming-conversion-service'
 import { s3Client } from '../../../lib/aws-services'
-import { HeadObjectCommand } from '@aws-sdk/client-s3'
+import { HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 
 interface ConversionRequest {
   fileId: string
@@ -173,11 +173,39 @@ async function parseAndValidateRequest(request: NextRequest): Promise<Conversion
  * Verify that the input file exists in S3 and get its metadata
  */
 async function verifyInputFile(requestData: ConversionRequest): Promise<S3Location> {
-  const inputKey = `uploads/${requestData.fileId}`
-  
   try {
-    console.log(`[ConversionAPI] Verifying input file: ${requestData.bucket}/${inputKey}`)
+    console.log(`[ConversionAPI] Looking for input file with fileId: ${requestData.fileId}`)
 
+    // First, try to find the file by listing objects with the fileId prefix
+    const listResult = await executeWithRetry(async () => {
+      return await s3Client.send(new ListObjectsV2Command({
+        Bucket: requestData.bucket,
+        Prefix: `uploads/${requestData.fileId}`,
+        MaxKeys: 10
+      }))
+    })
+
+    if (!listResult.Contents || listResult.Contents.length === 0) {
+      throw new Error(`Input file not found: ${requestData.fileId}. Please upload the file first.`)
+    }
+
+    // Find the exact file (should be uploads/fileId.extension)
+    const matchingFile = listResult.Contents.find(obj => {
+      const key = obj.Key || ''
+      // Match pattern: uploads/fileId.extension (not just uploads/fileId-something)
+      const pattern = new RegExp(`^uploads/${requestData.fileId}\\.[a-zA-Z0-9]+$`)
+      return pattern.test(key)
+    })
+
+    if (!matchingFile || !matchingFile.Key) {
+      console.log(`[ConversionAPI] Available files:`, listResult.Contents.map(obj => obj.Key))
+      throw new Error(`Input file not found: ${requestData.fileId}. Please upload the file first.`)
+    }
+
+    const inputKey = matchingFile.Key
+    console.log(`[ConversionAPI] Found input file: ${requestData.bucket}/${inputKey}`)
+
+    // Verify the file exists and get its metadata
     const headResult = await executeWithRetry(async () => {
       return await s3Client.send(new HeadObjectCommand({
         Bucket: requestData.bucket,
@@ -200,7 +228,7 @@ async function verifyInputFile(requestData: ConversionRequest): Promise<S3Locati
       throw new Error(`Input file not found: ${requestData.fileId}. Please upload the file first.`)
     }
     
-    console.error(`[ConversionAPI] Failed to verify input file ${inputKey}:`, error)
+    console.error(`[ConversionAPI] Failed to verify input file for fileId ${requestData.fileId}:`, error)
     throw new Error(`Failed to verify input file: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
@@ -274,6 +302,9 @@ async function startConversionProcess(job: any, requestData: ConversionRequest):
     if (conversionResult.success && conversionResult.outputS3Location) {
       // Update job status to completed with output location
       await updateJobStatus(jobId, JobStatus.COMPLETED, conversionResult.outputS3Location)
+
+      // Add a small delay to ensure DynamoDB consistency before marking progress complete
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       // Mark progress as complete
       await progressService.markComplete(jobId)
@@ -415,7 +446,7 @@ async function executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
  * Job recovery logic - check for orphaned jobs and handle them
  * This function can be called periodically or on startup
  */
-export async function recoverOrphanedJobs(): Promise<void> {
+async function recoverOrphanedJobs(): Promise<void> {
   console.log('[ConversionAPI] Starting orphaned job recovery process')
 
   try {

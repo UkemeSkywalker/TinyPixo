@@ -165,7 +165,7 @@
   - Interrupt a conversion process and see job recovery logic working correctly
   - Run integration tests and see the entire upload → convert → complete flow working
 
-- [-] 9. Build S3 streaming download service with proper file serving
+- [x] 9. Build S3 streaming download service with proper file serving
 
   - Create GET /api/download endpoint that streams converted files from S3
   - Implement presigned URL generation as alternative download method
@@ -186,7 +186,7 @@
   - Try downloading non-existent jobs and see proper 404 error handling
   - Verify file cleanup happens after successful downloads
 
-- [ ] 10. Update frontend to use new decoupled upload/conversion/download architecture
+- [x] 10. Update frontend to use new decoupled upload/conversion/download architecture
 
   - Modify file upload component to use new chunked upload API with progress tracking
   - Update conversion initiation to use job-based API instead of direct file processing

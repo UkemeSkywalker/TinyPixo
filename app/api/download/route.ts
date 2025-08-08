@@ -76,6 +76,7 @@ async function validateDownloadAccess(jobId: string): Promise<{
     // Get job from DynamoDB
     const job = await jobService.getJob(jobId)
     if (!job) {
+      console.log(`[Download] Job ${jobId} not found in database`)
       return {
         valid: false,
         error: 'Job not found',
@@ -83,8 +84,11 @@ async function validateDownloadAccess(jobId: string): Promise<{
       }
     }
 
+    console.log(`[Download] Job ${jobId} found with status: ${job.status}, outputS3Location: ${job.outputS3Location ? 'present' : 'missing'}`)
+
     // Check if conversion is completed
     if (job.status !== JobStatus.COMPLETED) {
+      console.log(`[Download] Job ${jobId} status check failed - current status: ${job.status}, expected: ${JobStatus.COMPLETED}`)
       return {
         valid: false,
         error: job.status === JobStatus.FAILED 
@@ -166,23 +170,43 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
     // Convert AWS SDK stream to web stream
     const webStream = new ReadableStream({
       start(controller) {
-        const reader = response.Body!.getReader()
+        // Handle different stream types from AWS SDK
+        const stream = response.Body as any
         
-        function pump(): Promise<void> {
-          return reader.read().then(({ done, value }) => {
-            if (done) {
-              controller.close()
-              return
-            }
-            controller.enqueue(value)
-            return pump()
-          }).catch(error => {
+        if (stream.getReader) {
+          // If it's already a ReadableStream
+          const reader = stream.getReader()
+          
+          function pump(): Promise<void> {
+            return reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close()
+                return
+              }
+              controller.enqueue(value)
+              return pump()
+            }).catch(error => {
+              console.error('[Download] Stream error:', error)
+              controller.error(error)
+            })
+          }
+          
+          return pump()
+        } else {
+          // Handle Node.js Readable stream
+          stream.on('data', (chunk: any) => {
+            controller.enqueue(new Uint8Array(chunk))
+          })
+          
+          stream.on('end', () => {
+            controller.close()
+          })
+          
+          stream.on('error', (error: any) => {
             console.error('[Download] Stream error:', error)
             controller.error(error)
           })
         }
-        
-        return pump()
       }
     })
 

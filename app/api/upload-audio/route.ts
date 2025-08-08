@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { s3Client, getRedisClient } from '../../../lib/aws-services'
-import { 
-  CreateMultipartUploadCommand, 
-  UploadPartCommand, 
+import {
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
   PutObjectCommand
@@ -13,7 +13,7 @@ import { randomUUID } from 'crypto'
 const SUPPORTED_FORMATS = ['mp3', 'wav', 'aac', 'ogg', 'm4a', 'flac']
 const SUPPORTED_MIME_TYPES = [
   'audio/mpeg',
-  'audio/wav', 
+  'audio/wav',
   'audio/wave',
   'audio/x-wav',
   'audio/aac',
@@ -25,7 +25,7 @@ const SUPPORTED_MIME_TYPES = [
 ]
 
 // File size limits
-const MAX_FILE_SIZE = 200 * 1024 * 1024 // 200MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024 // 500MB
 const MIN_CHUNK_SIZE = 5 * 1024 * 1024 // 5MB minimum for multipart
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks
 
@@ -151,23 +151,23 @@ async function retryWithBackoff<T>(
   baseDelay: number = 1000
 ): Promise<T> {
   let lastError: Error
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await operation()
     } catch (error) {
       lastError = error as Error
-      
+
       if (attempt === maxRetries) {
         throw lastError
       }
-      
+
       const delay = baseDelay * Math.pow(2, attempt)
       console.log(`Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, error)
       await new Promise(resolve => setTimeout(resolve, delay))
     }
   }
-  
+
   throw lastError!
 }
 
@@ -197,7 +197,7 @@ async function getUploadProgress(fileId: string): Promise<UploadProgress | null>
   } catch (error) {
     console.warn('Failed to get progress from Redis, checking in-memory fallback:', error)
   }
-  
+
   return uploadProgress.get(fileId) || null
 }
 
@@ -209,65 +209,65 @@ async function deleteUploadProgress(fileId: string): Promise<void> {
   } catch (error) {
     console.warn('Failed to delete progress from Redis:', error)
   }
-  
+
   uploadProgress.delete(fileId)
 }
 
 export async function POST(request: NextRequest) {
   const bucketName = process.env.S3_BUCKET_NAME || 'audio-conversion-bucket'
-  
+
   try {
     const contentType = request.headers.get('content-type') || ''
-    
+
     console.log(`Upload request received - Content-Type: ${contentType}`)
-    
+
     // Handle different upload types
     if (contentType.includes('multipart/form-data')) {
       return handleFormUpload(request, bucketName)
     } else if (contentType.includes('application/json')) {
       return handleChunkedUpload(request, bucketName)
     } else {
-      return NextResponse.json({ 
+      return NextResponse.json({
         error: 'Unsupported content type',
         details: 'Expected multipart/form-data or application/json'
       }, { status: 400 })
     }
   } catch (error) {
     console.error('Upload error:', error)
-    return NextResponse.json({ 
-      error: 'Upload failed', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Upload failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
 
 async function handleFormUpload(request: NextRequest, bucketName: string) {
   console.log('Handling form upload')
-  
+
   try {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    
+
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
-    
+
     console.log(`File received: ${file.name}, size: ${file.size} bytes, type: ${file.type}`)
-    
+
     // Validate file
     const validation = validateFile(file)
     if (!validation.valid) {
       console.log(`File validation failed: ${validation.error}`)
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
-    
+
     // Generate unique file ID and S3 key
     const fileId = generateFileId()
     const extension = getFileExtension(file.name)
     const s3Key = `uploads/${fileId}.${extension}`
-    
+
     console.log(`Uploading file: ${file.name} (${file.size} bytes) to ${s3Key}`)
-    
+
     // For small files, use simple upload
     if (file.size < MIN_CHUNK_SIZE) {
       return handleSimpleUpload(file, bucketName, s3Key, fileId)
@@ -276,9 +276,9 @@ async function handleFormUpload(request: NextRequest, bucketName: string) {
     }
   } catch (error) {
     console.error('Form upload error:', error)
-    return NextResponse.json({ 
-      error: 'Form upload failed', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Form upload failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
@@ -286,10 +286,10 @@ async function handleFormUpload(request: NextRequest, bucketName: string) {
 async function handleSimpleUpload(file: File, bucketName: string, s3Key: string, fileId: string) {
   try {
     console.log(`Using simple upload for file ${file.name}`)
-    
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    
+
     await retryWithBackoff(async () => {
       await s3Client.send(new PutObjectCommand({
         Bucket: bucketName,
@@ -303,9 +303,9 @@ async function handleSimpleUpload(file: File, bucketName: string, s3Key: string,
         }
       }))
     })
-    
+
     console.log(`Simple upload completed: ${s3Key}`)
-    
+
     return NextResponse.json({
       success: true,
       fileId,
@@ -325,10 +325,10 @@ async function handleSimpleUpload(file: File, bucketName: string, s3Key: string,
 
 async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: string, fileId: string) {
   let uploadId: string | undefined
-  
+
   try {
     console.log(`Using multipart upload for file ${file.name}`)
-    
+
     // Initialize multipart upload
     const createResponse = await retryWithBackoff(async () => {
       return await s3Client.send(new CreateMultipartUploadCommand({
@@ -342,16 +342,16 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
         }
       }))
     })
-    
+
     uploadId = createResponse.UploadId!
     console.log(`Multipart upload initialized: ${uploadId}`)
-    
+
     // Read file and upload in chunks
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     const totalChunks = Math.ceil(buffer.length / CHUNK_SIZE)
     const parts: Array<{ ETag: string; PartNumber: number }> = []
-    
+
     // Store initial progress
     const progress: UploadProgress = {
       uploadId,
@@ -366,15 +366,15 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
       bucketName
     }
     await storeUploadProgress(progress)
-    
+
     for (let i = 0; i < totalChunks; i++) {
       const start = i * CHUNK_SIZE
       const end = Math.min(start + CHUNK_SIZE, buffer.length)
       const chunk = buffer.subarray(start, end)
       const partNumber = i + 1
-      
+
       console.log(`Uploading part ${partNumber}/${totalChunks} (${chunk.length} bytes)`)
-      
+
       const uploadPartResponse = await retryWithBackoff(async () => {
         return await s3Client.send(new UploadPartCommand({
           Bucket: bucketName,
@@ -384,22 +384,22 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
           Body: chunk
         }))
       })
-      
+
       const part = {
         ETag: uploadPartResponse.ETag!,
         PartNumber: partNumber
       }
       parts.push(part)
-      
+
       // Update progress
       progress.parts.push(part)
       progress.completedChunks = i + 1
       progress.uploadedSize = Math.min(start + chunk.length, file.size)
       await storeUploadProgress(progress)
-      
+
       console.log(`Part ${partNumber} uploaded successfully, progress: ${Math.round((progress.uploadedSize / progress.totalSize) * 100)}%`)
     }
-    
+
     // Complete multipart upload
     await retryWithBackoff(async () => {
       await s3Client.send(new CompleteMultipartUploadCommand({
@@ -411,12 +411,12 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
         }
       }))
     })
-    
+
     console.log(`Multipart upload completed: ${s3Key}`)
-    
+
     // Clean up progress tracking
     await deleteUploadProgress(fileId)
-    
+
     return NextResponse.json({
       success: true,
       fileId,
@@ -430,7 +430,7 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
     })
   } catch (error) {
     console.error('Multipart upload error:', error)
-    
+
     // Abort multipart upload on error
     if (uploadId) {
       try {
@@ -444,10 +444,10 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
         console.error('Failed to abort multipart upload:', abortError)
       }
     }
-    
+
     // Clean up progress tracking
     await deleteUploadProgress(fileId)
-    
+
     throw error
   }
 }
@@ -455,9 +455,9 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
 async function handleChunkedUpload(request: NextRequest, bucketName: string) {
   const body = await request.json()
   const { action, fileId, fileName, fileSize, chunkIndex, totalChunks, chunk } = body
-  
+
   console.log(`Chunked upload action: ${action}, fileId: ${fileId}`)
-  
+
   switch (action) {
     case 'initiate':
       return initiateChunkedUpload(fileName, fileSize, bucketName)
@@ -476,17 +476,17 @@ async function handleChunkedUpload(request: NextRequest, bucketName: string) {
 
 async function initiateChunkedUpload(fileName: string, fileSize: number, bucketName: string) {
   console.log(`Initiating chunked upload for ${fileName} (${fileSize} bytes)`)
-  
+
   // Validate file
   const validation = validateFileByName(fileName, fileSize)
   if (!validation.valid) {
     return NextResponse.json({ error: validation.error }, { status: 400 })
   }
-  
+
   const fileId = generateFileId()
   const extension = getFileExtension(fileName)
   const s3Key = `uploads/${fileId}.${extension}`
-  
+
   try {
     // Initialize multipart upload
     const createResponse = await retryWithBackoff(async () => {
@@ -500,10 +500,10 @@ async function initiateChunkedUpload(fileName: string, fileSize: number, bucketN
         }
       }))
     })
-    
+
     const uploadId = createResponse.UploadId!
     const totalChunks = Math.ceil(fileSize / CHUNK_SIZE)
-    
+
     // Store upload progress
     const progress: UploadProgress = {
       uploadId,
@@ -518,9 +518,9 @@ async function initiateChunkedUpload(fileName: string, fileSize: number, bucketN
       bucketName
     }
     await storeUploadProgress(progress)
-    
+
     console.log(`Chunked upload initiated: ${fileId} (${uploadId})`)
-    
+
     return NextResponse.json({
       success: true,
       fileId,
@@ -530,26 +530,26 @@ async function initiateChunkedUpload(fileName: string, fileSize: number, bucketN
     })
   } catch (error) {
     console.error('Failed to initiate chunked upload:', error)
-    return NextResponse.json({ 
-      error: 'Failed to initiate upload', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Failed to initiate upload',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
 
 async function uploadChunk(fileId: string, chunkIndex: number, totalChunks: number, chunkData: string, bucketName: string) {
   console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks} for ${fileId}`)
-  
+
   try {
     const progress = await getUploadProgress(fileId)
     if (!progress) {
       return NextResponse.json({ error: 'Upload session not found' }, { status: 404 })
     }
-    
+
     // Decode base64 chunk data
     const chunkBuffer = Buffer.from(chunkData, 'base64')
     const partNumber = chunkIndex + 1
-    
+
     // Upload chunk
     const uploadPartResponse = await retryWithBackoff(async () => {
       return await s3Client.send(new UploadPartCommand({
@@ -560,7 +560,7 @@ async function uploadChunk(fileId: string, chunkIndex: number, totalChunks: numb
         Body: chunkBuffer
       }))
     })
-    
+
     // Update progress
     const part = {
       ETag: uploadPartResponse.ETag!,
@@ -570,10 +570,10 @@ async function uploadChunk(fileId: string, chunkIndex: number, totalChunks: numb
     progress.completedChunks = chunkIndex + 1
     progress.uploadedSize += chunkBuffer.length
     await storeUploadProgress(progress)
-    
+
     const progressPercent = Math.round((progress.uploadedSize / progress.totalSize) * 100)
     console.log(`Chunk ${partNumber} uploaded successfully, progress: ${progressPercent}%`)
-    
+
     return NextResponse.json({
       success: true,
       chunkIndex,
@@ -583,29 +583,29 @@ async function uploadChunk(fileId: string, chunkIndex: number, totalChunks: numb
     })
   } catch (error) {
     console.error(`Failed to upload chunk ${chunkIndex}:`, error)
-    return NextResponse.json({ 
-      error: 'Chunk upload failed', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Chunk upload failed',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
 
 async function completeChunkedUpload(fileId: string, bucketName: string) {
   console.log(`Completing chunked upload for ${fileId}`)
-  
+
   try {
     const progress = await getUploadProgress(fileId)
     if (!progress) {
       return NextResponse.json({ error: 'Upload session not found' }, { status: 404 })
     }
-    
+
     if (progress.completedChunks !== progress.totalChunks) {
-      return NextResponse.json({ 
-        error: 'Upload incomplete', 
-        details: `${progress.completedChunks}/${progress.totalChunks} chunks uploaded` 
+      return NextResponse.json({
+        error: 'Upload incomplete',
+        details: `${progress.completedChunks}/${progress.totalChunks} chunks uploaded`
       }, { status: 400 })
     }
-    
+
     // Complete multipart upload
     await retryWithBackoff(async () => {
       await s3Client.send(new CompleteMultipartUploadCommand({
@@ -617,12 +617,12 @@ async function completeChunkedUpload(fileId: string, bucketName: string) {
         }
       }))
     })
-    
+
     console.log(`Chunked upload completed: ${progress.s3Key}`)
-    
+
     // Clean up progress tracking
     await deleteUploadProgress(fileId)
-    
+
     return NextResponse.json({
       success: true,
       fileId,
@@ -636,43 +636,43 @@ async function completeChunkedUpload(fileId: string, bucketName: string) {
     })
   } catch (error) {
     console.error('Failed to complete chunked upload:', error)
-    return NextResponse.json({ 
-      error: 'Failed to complete upload', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Failed to complete upload',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
 
 async function abortChunkedUpload(fileId: string, bucketName: string) {
   console.log(`Aborting chunked upload for ${fileId}`)
-  
+
   try {
     const progress = await getUploadProgress(fileId)
     if (!progress) {
       return NextResponse.json({ error: 'Upload session not found' }, { status: 404 })
     }
-    
+
     // Abort multipart upload
     await s3Client.send(new AbortMultipartUploadCommand({
       Bucket: progress.bucketName,
       Key: progress.s3Key,
       UploadId: progress.uploadId
     }))
-    
+
     console.log(`Chunked upload aborted: ${progress.uploadId}`)
-    
+
     // Clean up progress tracking
     await deleteUploadProgress(fileId)
-    
+
     return NextResponse.json({
       success: true,
       message: 'Upload aborted successfully'
     })
   } catch (error) {
     console.error('Failed to abort chunked upload:', error)
-    return NextResponse.json({ 
-      error: 'Failed to abort upload', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Failed to abort upload',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
@@ -683,9 +683,9 @@ async function getUploadStatus(fileId: string) {
     if (!progress) {
       return NextResponse.json({ error: 'Upload session not found' }, { status: 404 })
     }
-    
+
     const progressPercent = Math.round((progress.uploadedSize / progress.totalSize) * 100)
-    
+
     return NextResponse.json({
       success: true,
       fileId: progress.fileId,
@@ -698,9 +698,9 @@ async function getUploadStatus(fileId: string) {
     })
   } catch (error) {
     console.error('Failed to get upload status:', error)
-    return NextResponse.json({ 
-      error: 'Failed to get upload status', 
-      details: error instanceof Error ? error.message : 'Unknown error' 
+    return NextResponse.json({
+      error: 'Failed to get upload status',
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
-   }
+}

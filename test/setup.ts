@@ -1,5 +1,6 @@
 // Test setup file for vitest
 import { beforeAll, afterAll } from 'vitest'
+import '@testing-library/jest-dom'
 
 // Set environment variables for testing
 process.env.NODE_ENV = 'test'

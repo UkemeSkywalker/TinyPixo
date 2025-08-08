@@ -1,10 +1,12 @@
-import { useRef } from 'react'
+import React, { useRef } from 'react'
 
 interface AudioUploadProps {
   onAudioUpload: (file: File) => void
+  isUploading?: boolean
+  uploadProgress?: number
 }
 
-export default function AudioUpload({ onAudioUpload }: AudioUploadProps) {
+export default function AudioUpload({ onAudioUpload, isUploading = false, uploadProgress = 0 }: AudioUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleClick = () => {
@@ -33,16 +35,37 @@ export default function AudioUpload({ onAudioUpload }: AudioUploadProps) {
   return (
     <div className="max-w-2xl mx-auto">
       <div 
-        onClick={handleClick}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        className="border-2 border-dashed border-purple-500/50 rounded-2xl p-12 text-center bg-gradient-to-br from-purple-900/10 to-pink-900/10 hover:border-purple-400 hover:bg-purple-900/20 transition-all duration-300 cursor-pointer group"
+        onClick={!isUploading ? handleClick : undefined}
+        onDrop={!isUploading ? handleDrop : undefined}
+        onDragOver={!isUploading ? handleDragOver : undefined}
+        className={`border-2 border-dashed rounded-2xl p-12 text-center bg-gradient-to-br transition-all duration-300 ${
+          isUploading 
+            ? 'border-purple-400 bg-purple-900/20 cursor-not-allowed' 
+            : 'border-purple-500/50 from-purple-900/10 to-pink-900/10 hover:border-purple-400 hover:bg-purple-900/20 cursor-pointer group'
+        }`}
       >
         <div className="space-y-6">
-          <div className="text-7xl group-hover:scale-110 transition-transform duration-300">🎵</div>
+          <div className={`text-7xl transition-transform duration-300 ${!isUploading ? 'group-hover:scale-110' : ''}`}>
+            {isUploading ? '⏳' : '🎵'}
+          </div>
           <div>
-            <p className="text-2xl font-semibold text-white mb-2">Drop your audio files here</p>
-            <p className="text-gray-300 mb-4">or click to browse files</p>
+            {isUploading ? (
+              <>
+                <p className="text-2xl font-semibold text-white mb-2">Uploading...</p>
+                <p className="text-gray-300 mb-4">{uploadProgress}% complete</p>
+                <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
+                  <div 
+                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-semibold text-white mb-2">Drop your audio files here</p>
+                <p className="text-gray-300 mb-4">or click to browse files</p>
+              </>
+            )}
             <div className="inline-flex items-center gap-2 text-sm text-purple-400 bg-purple-900/30 px-4 py-2 rounded-full">
               <span>🎧</span>
               <span>Supports: MP3, WAV, FLAC, AAC, OGG</span>
@@ -54,6 +77,7 @@ export default function AudioUpload({ onAudioUpload }: AudioUploadProps) {
             className="hidden" 
             accept="audio/*"
             onChange={handleFileChange}
+            disabled={isUploading}
           />
         </div>
       </div>

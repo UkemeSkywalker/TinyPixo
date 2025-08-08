@@ -29,7 +29,10 @@
     "test:streaming-fixed": "tsx scripts/test-streaming-fixed.ts",
     "test:real-audio": "tsx scripts/test-real-audio-streaming.ts",
     "test:real-aws": "tsx scripts/test-real-aws.ts",
-    "test:real-s3": "tsx scripts/test-real-s3-upload.ts"
+    "test:real-s3": "tsx scripts/test-real-s3-upload.ts",
+    "validate:task-9": "tsx scripts/validate-task-9.ts",
+    "test:large-download": "tsx scripts/test-large-file-download.ts",
+    "test:download-cleanup": "tsx scripts/test-download-cleanup.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.490.0",
@@ -38,6 +41,7 @@
     "@aws-sdk/client-s3": "^3.490.0",
     "@aws-sdk/client-sts": "^3.862.0",
     "@aws-sdk/lib-storage": "^3.863.0",
+    "@aws-sdk/s3-request-presigner": "^3.864.0",
     "@aws-sdk/util-dynamodb": "^3.490.0",
     "@ffmpeg/ffmpeg": "^0.12.7",
     "@ffmpeg/util": "^0.12.1",
@@ -52,6 +56,9 @@
     "sharp": "^0.32.6"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.4",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -59,6 +66,7 @@
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "^15.3.5",
+    "jsdom": "^26.1.0",
     "postcss": "^8",
     "tailwindcss": "^3.3.0",
     "tsx": "^4.7.0",

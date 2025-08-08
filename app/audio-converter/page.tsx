@@ -1,318 +1,299 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState } from 'react'
 import AudioUpload from '../../components/audio/AudioUpload'
 import AudioControls from '../../components/audio/AudioControls'
 import AudioPreview from '../../components/audio/AudioPreview'
 
+interface UploadedFile {
+  fileId: string
+  fileName: string
+  size: number
+}
+
+interface ConversionJob {
+  jobId: string
+  status: string
+}
+
 export default function AudioConverter() {
   const [originalFile, setOriginalFile] = useState<File | null>(null)
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null)
+  const [conversionJob, setConversionJob] = useState<ConversionJob | null>(null)
   const [convertedUrl, setConvertedUrl] = useState<string | null>(null)
   const [originalSize, setOriginalSize] = useState<number>(0)
   const [convertedSize, setConvertedSize] = useState<number>(0)
   const [format, setFormat] = useState<string>('mp3')
   const [quality, setQuality] = useState<string>('192k')
+  const [isUploading, setIsUploading] = useState<boolean>(false)
   const [isConverting, setIsConverting] = useState<boolean>(false)
-  const [progress, setProgress] = useState<number>(0)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [conversionProgress, setConversionProgress] = useState<number>(0)
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null)
-  const [phase, setPhase] = useState<'uploading' | 'converting'>('uploading')
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'converting' | 'completed' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
 
 
 
-  const handleAudioUpload = (file: File) => {
+  const handleAudioUpload = async (file: File) => {
     setOriginalFile(file)
     setOriginalSize(file.size)
-    setUploadedFileName(null) // Reset uploaded file name for new file
+    setUploadedFile(null)
+    setConversionJob(null)
     setConvertedUrl(null)
     setConvertedSize(0)
+    setError(null)
+    
+    // Start upload immediately
+    await uploadFile(file)
   }
 
-  const uploadFileInChunks = async (file: File): Promise<string> => {
-    const chunkSize = 1024 * 1024 // 1MB chunks
-    const totalChunks = Math.ceil(file.size / chunkSize)
-    const fileId = Date.now().toString()
-    const extension = file.name.split('.').pop()
-    const fileName = `${fileId}.${extension}`
+  const uploadFile = async (file: File): Promise<void> => {
+    setIsUploading(true)
+    setPhase('uploading')
+    setUploadProgress(0)
+    setError(null)
 
-    console.log(`Starting chunked upload: ${totalChunks} chunks of ${chunkSize} bytes`)
-    console.log('Generated fileName:', fileName)
-
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * chunkSize
-      const end = Math.min(start + chunkSize, file.size)
-      const chunk = file.slice(start, end)
-
-      console.log(`Uploading chunk ${i + 1}/${totalChunks} (${chunk.size} bytes)`)
+    try {
+      console.log(`[Upload] Starting upload for file: ${file.name} (${file.size} bytes)`)
 
       const formData = new FormData()
-      formData.append('chunk', chunk)
-      formData.append('chunkIndex', i.toString())
-      formData.append('totalChunks', totalChunks.toString())
-      formData.append('fileId', fileId)
-      formData.append('fileName', fileName)
+      formData.append('file', file)
 
-      const response = await fetch('/api/upload-chunk', {
+      const response = await fetch('/api/upload-audio', {
         method: 'POST',
         body: formData,
       })
 
       if (!response.ok) {
-        console.error(`Chunk ${i} upload failed with status:`, response.status)
-        throw new Error(`Chunk ${i} upload failed`)
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }))
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`)
       }
 
-      // Update upload progress
-      const uploadProgress = Math.round(((i + 1) / totalChunks) * 100)
-      console.log(`Upload progress: ${uploadProgress}%`)
-      setProgress(uploadProgress)
-    }
+      const result = await response.json()
+      console.log(`[Upload] Upload completed:`, result)
 
-    console.log('Chunked upload completed successfully')
-    return fileName
+      setUploadedFile({
+        fileId: result.fileId,
+        fileName: result.fileName,
+        size: result.size
+      })
+      setUploadProgress(100)
+      setPhase('idle')
+
+      console.log(`[Upload] File uploaded successfully: ${result.fileId}`)
+
+    } catch (error) {
+      console.error('[Upload] Upload failed:', error)
+      setError(error instanceof Error ? error.message : 'Upload failed')
+      setPhase('error')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const convertAudio = async () => {
-    if (!originalFile) {
-      alert('Please select an audio file first.')
+    if (!uploadedFile) {
+      setError('Please upload a file first')
       return
     }
 
-    console.log('=== CONVERSION STARTED ===')
-    console.log('File:', originalFile.name, 'Size:', originalFile.size)
-    console.log('Already uploaded:', !!uploadedFileName)
+    console.log('[Conversion] Starting conversion for fileId:', uploadedFile.fileId)
     
     setIsConverting(true)
-    setProgress(0)
+    setPhase('converting')
+    setConversionProgress(0)
+    setError(null)
 
-    let progressInterval = null
+    let progressInterval: NodeJS.Timeout | null = null
+
     try {
-      let fileName = uploadedFileName
-      
-      // Only upload if file hasn't been uploaded yet
-      if (!uploadedFileName) {
-        console.log('Starting upload phase...')
-        setPhase('uploading')
-        fileName = await uploadFileInChunks(originalFile)
-        setUploadedFileName(fileName)
-        console.log('Upload completed, fileName:', fileName)
-      } else {
-        console.log('Skipping upload, using existing file:', fileName)
-      }
-      
-      // Phase 2: Convert the uploaded file
-      console.log('Starting conversion phase...')
-      setPhase('converting')
-      setProgress(0)
-      
-      console.log('Sending conversion request:', { fileName, format, quality })
-      
-      // Add timeout to the conversion start request
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout
-      
-      const processResponse = await fetch('/api/convert-audio/process', {
+      // Start conversion job
+      const conversionResponse = await fetch('/api/convert-audio', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          fileName,
+          fileId: uploadedFile.fileId,
           format,
           quality,
         }),
-        signal: controller.signal
       })
-      
-      clearTimeout(timeoutId)
-      
-      console.log('Conversion response received')
-      console.log('Response status:', processResponse.status)
-      console.log('Response headers:', [...processResponse.headers.entries()])
-      
-      const jobId = processResponse.headers.get('X-Job-Id')
-      console.log('Extracted jobId:', jobId)
-      
-      if (jobId) {
-        console.log('Starting progress polling for jobId:', jobId)
-        
-        // Start polling with timeout protection and exponential backoff
-        let pollAttempts = 0
-        let pollDelay = 500 // Start with 500ms
-        const maxPollDelay = 5000 // Max 5 seconds between polls
-        
-        const pollProgress = async () => {
-          try {
-            console.log('Polling progress for jobId:', jobId, 'attempt:', pollAttempts + 1)
-            
-            // Add timeout to prevent hanging requests
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-            
-            const progressResponse = await fetch(`/api/progress?jobId=${jobId}`, {
-              signal: controller.signal,
-              headers: {
-                'Cache-Control': 'no-cache'
-              }
-            })
-            
-            clearTimeout(timeoutId)
-            
-            if (progressResponse.ok) {
-              const data = await progressResponse.json()
-              console.log('Progress response received:', data)
-              console.log('Setting UI progress to:', data.progress + '%')
-              
-              // Reset poll delay on successful response
-              pollDelay = 500
-              pollAttempts = 0
-              
-              setProgress(data.progress)
-              
-              if (data.estimatedTimeRemaining !== undefined) {
-                setEstimatedTimeRemaining(data.estimatedTimeRemaining)
-              }
-              
-              if (data.progress >= 100) {
-                console.log('Progress complete, stopping polling')
-                if (progressInterval) {
-                  clearInterval(progressInterval)
-                  progressInterval = null
-                }
-                return
-              }
-              
-              if (data.progress === -1) {
-                console.log('Progress failed, stopping polling')
-                if (progressInterval) {
-                  clearInterval(progressInterval)
-                  progressInterval = null
-                }
-                setError('Conversion failed')
-                setIsConverting(false)
-                return
-              }
-              
-              // Schedule next poll
-              if (progressInterval) {
-                clearInterval(progressInterval)
-              }
-              progressInterval = setTimeout(pollProgress, pollDelay)
-              
-            } else {
-              console.error('Progress response not ok:', progressResponse.status)
-              handlePollError()
-            }
-          } catch (err) {
-            console.error('Progress fetch error:', err)
-            handlePollError()
-          }
-        }
-        
-        const handlePollError = () => {
-          pollAttempts++
-          
-          // If too many failures, stop polling
-          if (pollAttempts > 10) {
-            console.error('Too many polling failures, stopping')
-            if (progressInterval) {
-              clearInterval(progressInterval)
-              progressInterval = null
-            }
-            setError('Connection lost during conversion')
-            setIsConverting(false)
-            return
-          }
-          
-          // Exponential backoff
-          pollDelay = Math.min(pollDelay * 1.5, maxPollDelay)
-          console.log(`Retrying in ${pollDelay}ms (attempt ${pollAttempts})`)
-          
-          // Schedule retry
-          if (progressInterval) {
-            clearInterval(progressInterval)
-          }
-          progressInterval = setTimeout(pollProgress, pollDelay)
-        }
-        
-        // Start polling immediately
-        pollProgress()
-      } else {
-        console.error('No jobId received, cannot start progress polling')
+
+      if (!conversionResponse.ok) {
+        const errorData = await conversionResponse.json().catch(() => ({ error: 'Conversion failed' }))
+        throw new Error(errorData.error || `Conversion failed with status ${conversionResponse.status}`)
       }
 
-      if (processResponse.ok) {
-        // Wait for conversion to complete
-        const waitForCompletion = () => {
-          return new Promise((resolve) => {
-            const checkProgress = async () => {
-              try {
-                const progressResponse = await fetch(`/api/progress?jobId=${jobId}`)
-                if (progressResponse.ok) {
-                  const data = await progressResponse.json()
-                  if (data.progress === 100) {
-                    resolve(true)
-                  } else if (data.progress === -1) {
-                    resolve(false)
-                  } else {
-                    setTimeout(checkProgress, 500)
-                  }
-                } else {
-                  setTimeout(checkProgress, 500)
-                }
-              } catch (err) {
-                setTimeout(checkProgress, 500)
-              }
-            }
-            checkProgress()
-          })
-        }
-        
-        const success = await waitForCompletion()
-        if (success) {
-          console.log('Conversion completed successfully')
-          
-          // Download the converted file
-          try {
-            const downloadResponse = await fetch(`/api/convert-audio/download?jobId=${jobId}`)
-            if (downloadResponse.ok) {
-              const blob = await downloadResponse.blob()
-              console.log('Converted file size:', blob.size)
-              const url = URL.createObjectURL(blob)
-              setConvertedUrl(url)
-              setConvertedSize(blob.size)
-              console.log('Converted audio ready for download')
-            } else {
-              console.error('Download failed:', downloadResponse.status)
-              setError('Failed to download converted audio')
-            }
-          } catch (err) {
-            console.error('Download error:', err)
-            setError('Failed to download converted audio')
-          }
-        } else {
-          alert('Conversion failed')
-        }
-      } else {
-        console.error('Conversion failed with status:', processResponse.status)
-        const errorData = await processResponse.json().catch(() => ({ error: 'Conversion failed' }))
-        console.error('Error details:', errorData)
-        alert(`Conversion failed: ${errorData.error}`)
-      }
+      const conversionResult = await conversionResponse.json()
+      const jobId = conversionResult.jobId
+
+      console.log('[Conversion] Job created:', jobId)
+
+      setConversionJob({
+        jobId,
+        status: conversionResult.status
+      })
+
+      // Start progress polling
+      await startProgressPolling(jobId)
+
     } catch (error) {
-      console.error('=== CONVERSION ERROR ===')
-      console.error('Error details:', error)
-      console.error('Error stack:', error.stack)
-      alert('Conversion failed. Please try again.')
+      console.error('[Conversion] Conversion failed:', error)
+      setError(error instanceof Error ? error.message : 'Conversion failed')
+      setPhase('error')
     } finally {
       if (progressInterval) {
-        clearInterval(progressInterval)
-        console.log('Progress polling stopped')
+        clearTimeout(progressInterval)
       }
       setIsConverting(false)
-      console.log('=== CONVERSION ENDED ===')
+    }
+  }
+
+  const startProgressPolling = async (jobId: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      let pollAttempts = 0
+      let pollDelay = 500 // Start with 500ms
+      const maxPollDelay = 5000 // Max 5 seconds between polls
+      const maxAttempts = 600 // 5 minutes max (600 * 500ms)
+
+      const pollProgress = async () => {
+        try {
+          console.log(`[Progress] Polling progress for jobId: ${jobId}, attempt: ${pollAttempts + 1}`)
+
+          const progressResponse = await fetch(`/api/progress?jobId=${jobId}`, {
+            headers: {
+              'Cache-Control': 'no-cache'
+            }
+          })
+
+          if (progressResponse.ok) {
+            const data = await progressResponse.json()
+            console.log('[Progress] Progress data received:', data)
+
+            // Reset poll delay on successful response
+            pollDelay = 500
+            pollAttempts = 0
+
+            setConversionProgress(data.progress || 0)
+
+            if (data.estimatedTimeRemaining !== undefined) {
+              setEstimatedTimeRemaining(data.estimatedTimeRemaining)
+            }
+
+            if (data.progress >= 100) {
+              console.log('[Progress] Conversion completed')
+              setPhase('completed')
+              await downloadConvertedFile(jobId)
+              resolve()
+              return
+            }
+
+            if (data.progress === -1 || data.stage === 'failed') {
+              console.log('[Progress] Conversion failed')
+              setError(data.error || 'Conversion failed')
+              setPhase('error')
+              reject(new Error(data.error || 'Conversion failed'))
+              return
+            }
+
+            // Schedule next poll
+            setTimeout(pollProgress, pollDelay)
+
+          } else {
+            console.error('[Progress] Progress response not ok:', progressResponse.status)
+            handlePollError()
+          }
+        } catch (err) {
+          console.error('[Progress] Progress fetch error:', err)
+          handlePollError()
+        }
+      }
+
+      const handlePollError = () => {
+        pollAttempts++
+
+        // If too many failures, stop polling
+        if (pollAttempts > maxAttempts) {
+          console.error('[Progress] Too many polling failures, stopping')
+          setError('Connection lost during conversion')
+          setPhase('error')
+          reject(new Error('Connection lost during conversion'))
+          return
+        }
+
+        // Exponential backoff
+        pollDelay = Math.min(pollDelay * 1.5, maxPollDelay)
+        console.log(`[Progress] Retrying in ${pollDelay}ms (attempt ${pollAttempts})`)
+
+        // Schedule retry
+        setTimeout(pollProgress, pollDelay)
+      }
+
+      // Start polling immediately
+      pollProgress()
+    })
+  }
+
+  const downloadConvertedFile = async (jobId: string): Promise<void> => {
+    const maxRetries = 5
+    const retryDelay = 1000 // 1 second
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[Download] Starting download for jobId: ${jobId} (attempt ${attempt}/${maxRetries})`)
+
+        const downloadResponse = await fetch(`/api/download?jobId=${jobId}`)
+        
+        if (downloadResponse.ok) {
+          const blob = await downloadResponse.blob()
+          console.log('[Download] Downloaded file size:', blob.size)
+
+          const url = URL.createObjectURL(blob)
+          setConvertedUrl(url)
+          setConvertedSize(blob.size)
+
+          console.log('[Download] Converted audio ready for download')
+          return // Success, exit the retry loop
+        }
+
+        const errorData = await downloadResponse.json().catch(() => ({ error: 'Download failed' }))
+        
+        // If it's a "not completed yet" error and we have retries left, wait and retry
+        if (downloadResponse.status === 400 && 
+            errorData.error?.includes('not completed yet') && 
+            attempt < maxRetries) {
+          console.log(`[Download] Job not ready yet, retrying in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+          continue
+        }
+
+        // For other errors or if we've exhausted retries, throw the error
+        throw new Error(errorData.error || `Download failed with status ${downloadResponse.status}`)
+
+      } catch (error) {
+        if (attempt === maxRetries) {
+          console.error('[Download] Download failed after all retries:', error)
+          setError(error instanceof Error ? error.message : 'Failed to download converted audio')
+          setPhase('error')
+          return
+        }
+        
+        // If it's not the last attempt and it's a network error, retry
+        if (error instanceof Error && error.message.includes('not completed yet')) {
+          console.log(`[Download] Retrying download in ${retryDelay}ms (attempt ${attempt}/${maxRetries})`)
+          await new Promise(resolve => setTimeout(resolve, retryDelay))
+          continue
+        }
+        
+        // For other errors, don't retry
+        console.error('[Download] Download failed:', error)
+        setError(error instanceof Error ? error.message : 'Failed to download converted audio')
+        setPhase('error')
+        return
+      }
     }
   }
 
@@ -328,10 +309,16 @@ export default function AudioConverter() {
 
   const handleBackToUpload = () => {
     setOriginalFile(null)
-    setUploadedFileName(null)
+    setUploadedFile(null)
+    setConversionJob(null)
     setConvertedUrl(null)
     setOriginalSize(0)
     setConvertedSize(0)
+    setUploadProgress(0)
+    setConversionProgress(0)
+    setEstimatedTimeRemaining(null)
+    setPhase('idle')
+    setError(null)
   }
 
   return (
@@ -347,7 +334,11 @@ export default function AudioConverter() {
             </p>
           </div>
 
-          <AudioUpload onAudioUpload={handleAudioUpload} />
+          <AudioUpload 
+            onAudioUpload={handleAudioUpload} 
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+          />
 
           <div className="grid md:grid-cols-3 gap-6 mt-12">
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
@@ -363,7 +354,7 @@ export default function AudioConverter() {
             <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
               <div className="text-3xl mb-3">📁</div>
               <h3 className="text-lg font-semibold text-white mb-2">Large Files</h3>
-              <p className="text-gray-400">Support for audio files up to 200MB with reliable upload.</p>
+              <p className="text-gray-400">Support for audio files up to 500MB with reliable upload.</p>
             </div>
           </div>
         </>
@@ -384,10 +375,15 @@ export default function AudioConverter() {
             onFormatChange={setFormat}
             onQualityChange={setQuality}
             onConvert={convertAudio}
+            isUploading={isUploading}
             isConverting={isConverting}
-            progress={progress}
+            uploadProgress={uploadProgress}
+            conversionProgress={conversionProgress}
             estimatedTimeRemaining={estimatedTimeRemaining}
             phase={phase}
+            uploadedFile={uploadedFile}
+            conversionJob={conversionJob}
+            error={error}
           />
 
           <AudioPreview
