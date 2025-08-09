@@ -5,7 +5,7 @@ import { join } from 'path'
 import { getEnvironmentConfig } from '../../../lib/environment'
 import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb'
-import Redis from 'ioredis'
+import { Redis } from 'ioredis'
 
 export async function GET(request: NextRequest) {
   try {
@@ -185,8 +185,10 @@ async function checkRedisHealth(config: any, health: any) {
       host: config.redis.host,
       port: config.redis.port,
       tls: config.redis.tls ? {} : undefined,
-      connectTimeout: 5000,
-      lazyConnect: true
+      connectTimeout: 10000,
+      commandTimeout: 5000,
+      lazyConnect: true,
+      maxRetriesPerRequest: 3
     })
     
     await redis.connect()

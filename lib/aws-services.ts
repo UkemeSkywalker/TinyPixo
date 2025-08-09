@@ -23,25 +23,32 @@ export const dynamodbClient = new DynamoDBClient({
 // Redis Client
 let redisClient: RedisClientType | null = null
 
-export async function getRedisClient(): Promise<RedisClientType> {
+export async function getRedisClient(): Promise<RedisClientType | null> {
     if (!redisClient) {
-        const redisUrl = config.redis.tls
-            ? `rediss://${config.redis.host}:${config.redis.port}`
-            : `redis://${config.redis.host}:${config.redis.port}`
+        try {
+            const redisUrl = config.redis.tls
+                ? `rediss://${config.redis.host}:${config.redis.port}`
+                : `redis://${config.redis.host}:${config.redis.port}`
 
-        redisClient = createClient({
-            url: redisUrl,
-            socket: {
-                connectTimeout: 5000
-            },
-            commandsQueueMaxLength: 1000
-        })
+            redisClient = createClient({
+                url: redisUrl,
+                socket: {
+                    connectTimeout: 10000,
+                    commandTimeout: 5000,
+                    reconnectStrategy: (retries) => Math.min(retries * 50, 500)
+                },
+                commandsQueueMaxLength: 1000
+            })
 
-        redisClient.on('error', (err) => {
-            console.error('Redis client error:', err)
-        })
+            redisClient.on('error', (err) => {
+                console.error('Redis client error:', err)
+            })
 
-        await redisClient.connect()
+            await redisClient.connect()
+        } catch (error) {
+            console.error('Failed to connect to Redis:', error)
+            return null
+        }
     }
 
     return redisClient
@@ -131,6 +138,11 @@ export async function initializeRedis(): Promise<void> {
     try {
         console.log('Connecting to Redis...')
         const redis = await getRedisClient()
+        
+        if (!redis) {
+            throw new Error('Failed to get Redis client')
+        }
+        
         console.log('Redis client obtained, testing connection...')
 
         // Test Redis connection
@@ -168,7 +180,7 @@ export async function initializeAllServices(): Promise<void> {
 
         console.log('Step 3: Initializing Redis...')
         await initializeRedis()
-        console.log('Step 3: Redis initialization completed')
+        console.log('Step 3: Redis initialization completed (or skipped if not available)')
 
         console.log('🎉 All services initialized successfully!')
     } catch (error) {
