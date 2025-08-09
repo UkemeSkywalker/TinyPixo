@@ -101,7 +101,10 @@ export default function TrueStreamingConverter() {
 
           try {
             // Decode audio chunk in real-time
-            const audioBuffer = await audioContext.decodeAudioData(value.buffer)
+            const uint8Array = new Uint8Array(value.buffer)
+            const newArrayBuffer = new ArrayBuffer(uint8Array.byteLength)
+            new Uint8Array(newArrayBuffer).set(uint8Array)
+            const audioBuffer = await audioContext.decodeAudioData(newArrayBuffer)
             
             // Play immediately or append to existing audio
             source.buffer = audioBuffer

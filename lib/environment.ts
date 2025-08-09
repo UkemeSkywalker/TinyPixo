@@ -48,7 +48,7 @@ export function detectEnvironment(): Environment {
   }
   
   // Check if running in Docker
-  if (process.env.DOCKER_ENV === 'true' || process.env.NODE_ENV === 'docker') {
+  if (process.env.DOCKER_ENV === 'true') {
     return Environment.DOCKER
   }
   

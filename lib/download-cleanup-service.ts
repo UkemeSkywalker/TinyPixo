@@ -55,7 +55,7 @@ export class DownloadCleanupService {
       }
 
       // Clean up orphaned files in S3
-      await this.cleanupOrphanedFiles(config, result)
+      await this.cleanupOrphanedFilesInternal(config, result)
 
     } catch (error) {
       const errorMessage = `Cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -141,7 +141,26 @@ export class DownloadCleanupService {
   /**
    * Clean up orphaned files in S3 that don't have corresponding jobs
    */
-  private async cleanupOrphanedFiles(config: CleanupConfig, result: CleanupResult): Promise<void> {
+  async cleanupOrphanedFiles(config: CleanupConfig = {
+    maxAgeHours: 24,
+    batchSize: 100,
+    dryRun: false
+  }): Promise<CleanupResult> {
+    const result: CleanupResult = {
+      filesDeleted: 0,
+      jobsProcessed: 0,
+      errors: [],
+      duration: 0
+    }
+    
+    await this.cleanupOrphanedFilesInternal(config, result)
+    return result
+  }
+
+  /**
+   * Internal method for cleaning up orphaned files
+   */
+  private async cleanupOrphanedFilesInternal(config: CleanupConfig, result: CleanupResult): Promise<void> {
     try {
       console.log('[DownloadCleanup] Scanning for orphaned files...')
 

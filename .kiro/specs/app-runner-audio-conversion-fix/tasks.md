@@ -228,7 +228,7 @@
   - Monitor CPU/memory usage and see alerts when thresholds are exceeded
   - Use debugging endpoints to inspect job states and system health in real-time
 
-- [ ] 12. Create comprehensive test suite with multi-environment support
+- [x] 12. Create comprehensive test suite with multi-environment support
 
   - Write unit tests for all service components with mocked dependencies
   - Create integration tests for complete upload → conversion → download workflow
@@ -249,20 +249,24 @@
   - Run performance tests with 200MB files and see acceptable processing times
   - Test AWS service failures and see recovery mechanisms working correctly
 
-- [ ] 13. Configure and deploy to App Runner with production validation
+- [x] 13. Configure and deploy to App Runner with Docker and production validation
 
-  - Set up App Runner service configuration with proper environment variables
+  - Create Dockerfile.dev by cloning existing Dockerfile and adding audio conversion optimizations
+  - Preserve all Sharp configurations in both Dockerfiles (needed for v1 image optimization)
+  - Configure App Runner to use Docker runtime with Dockerfile.dev for audio conversion features
+  - Set up proper environment variables for production AWS services (S3, DynamoDB, Redis)
   - Deploy to staging environment using existing AWS resources from Task 3
-  - Validate that all services connect properly in App Runner environment
-  - Test container restart resilience with real conversion jobs
+  - Validate that all services connect properly in App Runner Docker environment
+  - Test container restart resilience with real conversion jobs and job recovery
   - Perform load testing with concurrent users and various file sizes
   - Monitor system performance and validate that progress tracking survives container restarts
-  - Verify that the 95% → 0% progress loop issue is completely resolved
+  - Verify that the 95% → 0% progress loop issue is completely resolved in production
   - _Requirements: 1.3, 1.5, 2.3, 3.5, 5.3, 5.4, 6.7_
 
   **Validation Criteria:** After completing this task, you should be able to:
 
   - Access your deployed App Runner service URL and see the audio converter working
+  - Verify both v1 (image optimization with Sharp) and v2 (audio conversion) features work
   - Upload and convert files in production and see progress go from 0% to 100% without resetting
   - Force container restarts during conversion and see jobs complete successfully
   - Run load tests with 10+ concurrent users and see system handle the load

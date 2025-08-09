@@ -19,7 +19,11 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'cleanup':
-        await downloadCleanupService.cleanupCompletedDownloads(olderThanHours)
+        await downloadCleanupService.cleanupCompletedDownloads({
+          maxAgeHours: olderThanHours,
+          batchSize: 100,
+          dryRun: false
+        })
         result = { message: `Cleanup completed for files older than ${olderThanHours} hours` }
         break
 
@@ -29,26 +33,30 @@ export async function POST(request: NextRequest) {
         break
 
       case 'stats':
-        const stats = await downloadCleanupService.getStorageStats()
+        const stats = await downloadCleanupService.getCleanupStats()
         result = {
           message: 'Storage statistics retrieved',
           stats: {
             ...stats,
-            totalSizeMB: Math.round(stats.totalSize / (1024 * 1024) * 100) / 100
+            estimatedCleanupSizeMB: Math.round(stats.estimatedCleanupSize / (1024 * 1024) * 100) / 100
           }
         }
         break
 
       case 'full':
         // Run both cleanup operations
-        await downloadCleanupService.cleanupCompletedDownloads(olderThanHours)
+        await downloadCleanupService.cleanupCompletedDownloads({
+          maxAgeHours: olderThanHours,
+          batchSize: 100,
+          dryRun: false
+        })
         await downloadCleanupService.cleanupOrphanedFiles()
-        const finalStats = await downloadCleanupService.getStorageStats()
+        const finalStats = await downloadCleanupService.getCleanupStats()
         result = {
           message: 'Full cleanup completed',
           stats: {
             ...finalStats,
-            totalSizeMB: Math.round(finalStats.totalSize / (1024 * 1024) * 100) / 100
+            estimatedCleanupSizeMB: Math.round(finalStats.estimatedCleanupSize / (1024 * 1024) * 100) / 100
           }
         }
         break
@@ -88,19 +96,13 @@ export async function GET(request: NextRequest) {
   try {
     console.log('[CleanupDownloads] Getting storage statistics')
     
-    const stats = await downloadCleanupService.getStorageStats()
+    const stats = await downloadCleanupService.getCleanupStats()
     
     return NextResponse.json({
       success: true,
       stats: {
         ...stats,
-        totalSizeMB: Math.round(stats.totalSize / (1024 * 1024) * 100) / 100,
-        oldestFileAge: stats.oldestFile 
-          ? Math.round((Date.now() - stats.oldestFile.getTime()) / (1000 * 60 * 60)) + ' hours'
-          : 'N/A',
-        newestFileAge: stats.newestFile
-          ? Math.round((Date.now() - stats.newestFile.getTime()) / (1000 * 60 * 60)) + ' hours'
-          : 'N/A'
+        estimatedCleanupSizeMB: Math.round(stats.estimatedCleanupSize / (1024 * 1024) * 100) / 100
       }
     })
 

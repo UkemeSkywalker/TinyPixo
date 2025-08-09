@@ -200,7 +200,7 @@ async function setupElastiCacheRedis(): Promise<void> {
                 await elasticacheClient.send(new CreateReplicationGroupCommand({
                     ReplicationGroupId: REDIS_CLUSTER_ID,
                     ReplicationGroupDescription: 'Redis cluster for audio conversion progress tracking',
-                    NodeType: REDIS_NODE_TYPE,
+                    CacheNodeType: REDIS_NODE_TYPE,
                     NumCacheClusters: 1,
                     Engine: 'redis',
                     EngineVersion: '7.0',

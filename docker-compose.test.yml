@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # Main application container (simulates App Runner environment)
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=test
+      - DOCKER_ENV=true
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_BUCKET_NAME=audio-conversion-bucket
+      - S3_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - REDIS_ENDPOINT=redis:6379
+      - INTEGRATION_TEST_USE_REAL_AWS=false
+    depends_on:
+      - localstack
+      - dynamodb-local
+      - redis
+    volumes:
+      - /tmp # Ephemeral storage like App Runner
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # LocalStack for S3 simulation
+  localstack:
+    image: localstack/localstack:3.0
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - HOST_TMP_FOLDER=/tmp/localstack
+    volumes:
+      - "/tmp/localstack:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # DynamoDB Local
+  dynamodb-local:
+    image: amazon/dynamodb-local:2.0.0
+    ports:
+      - "8001:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Redis for progress tracking
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-test-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Test runner container
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - NODE_ENV=test
+      - DOCKER_ENV=true
+      - TEST_ENVIRONMENT=docker
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_BUCKET_NAME=audio-conversion-bucket
+      - S3_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - REDIS_ENDPOINT=redis:6379
+      - INTEGRATION_TEST_USE_REAL_AWS=false
+    depends_on:
+      app-test:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      dynamodb-local:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - test-results:/app/test-results
+    working_dir: /app
+    command: ["npm", "run", "test:docker"]
+    profiles:
+      - test
+
+  # Container restart simulator
+  restart-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=test
+      - DOCKER_ENV=true
+      - SIMULATE_RESTARTS=true
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_BUCKET_NAME=audio-conversion-bucket
+      - S3_ENDPOINT=http://localstack:4566
+      - DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+      - REDIS_ENDPOINT=redis:6379
+    depends_on:
+      - localstack
+      - dynamodb-local
+      - redis
+    volumes:
+      - /tmp
+    restart: "no" # Will be restarted manually for testing
+    profiles:
+      - restart-test
+
+volumes:
+  redis-test-data:
+  test-results:
+
+networks:
+  default:
+    driver: bridge

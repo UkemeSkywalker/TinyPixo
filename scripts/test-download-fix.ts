@@ -10,13 +10,10 @@ import { progressService } from '../lib/progress-service'
 async function testDownloadRaceCondition() {
   console.log('Testing download race condition fix...')
   
-  const testJobId = `test-${Date.now()}`
-  
   try {
     // Simulate the conversion completion flow
     console.log('1. Creating test job...')
-    await jobService.createJob({
-      jobId: testJobId,
+    const createdJob = await jobService.createJob({
       inputS3Location: {
         bucket: 'test-bucket',
         key: 'test-input.mp3',
@@ -25,6 +22,7 @@ async function testDownloadRaceCondition() {
       format: 'wav',
       quality: 'high'
     })
+    const testJobId = createdJob.jobId
     
     // Simulate job completion
     console.log('2. Updating job status to COMPLETED...')
@@ -59,9 +57,7 @@ async function testDownloadRaceCondition() {
       console.log(`  Job Status: ${job?.status}`)
     }
     
-    // Cleanup
-    console.log('6. Cleaning up test job...')
-    await jobService.deleteJob(testJobId)
+    // Note: Job will be cleaned up automatically by TTL
     
   } catch (error) {
     console.error('Test failed:', error)

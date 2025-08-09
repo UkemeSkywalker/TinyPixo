@@ -1,0 +1,86 @@
+# Docker Compose configuration that mimics AWS App Runner environment
+# Use this for local testing before deploying to App Runner
+
+version: '3.8'
+
+services:
+  audio-converter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - FORCE_AWS_ENVIRONMENT=true
+      - AWS_REGION=us-east-1
+      - S3_BUCKET_NAME=audio-conversion-app-bucket
+      - REDIS_PORT=6379
+      - REDIS_TLS=false
+      - REDIS_ENDPOINT=redis
+      - FFMPEG_PATH=/usr/local/bin/ffmpeg
+      - BODY_SIZE_LIMIT=500mb
+      - NEXT_SHARP_PATH=/app/node_modules/sharp
+    depends_on:
+      - redis
+      - localstack
+      - dynamodb-local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # LocalStack for S3 simulation
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./tmp/localstack:/tmp/localstack"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # DynamoDB Local
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    ports:
+      - "8000:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for progress tracking
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+
+networks:
+  default:
+    name: audio-converter-network

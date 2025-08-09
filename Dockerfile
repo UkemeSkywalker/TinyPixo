@@ -25,8 +25,7 @@ RUN apk add --no-cache \
     g++
 
 COPY package*.json ./
-RUN npm ci
-RUN npm install sharp
+RUN npm ci && npm rebuild sharp
 COPY . .
 RUN npm run build
 

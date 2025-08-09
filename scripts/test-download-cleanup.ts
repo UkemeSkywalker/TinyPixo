@@ -21,12 +21,11 @@ async function testDownloadCleanup() {
 
     // Test 1: Get initial storage stats
     console.log('\n📊 Getting initial storage statistics...')
-    const initialStats = await downloadCleanupService.getStorageStats()
+    const initialStats = await downloadCleanupService.getCleanupStats()
     console.log('Initial stats:', {
       totalFiles: initialStats.totalFiles,
-      totalSizeMB: Math.round(initialStats.totalSize / (1024 * 1024) * 100) / 100,
-      oldestFile: initialStats.oldestFile?.toISOString(),
-      newestFile: initialStats.newestFile?.toISOString()
+      oldFiles: initialStats.oldFiles,
+      estimatedCleanupSizeMB: Math.round(initialStats.estimatedCleanupSize / (1024 * 1024) * 100) / 100
     })
 
     // Test 2: Create some test files
@@ -72,10 +71,11 @@ async function testDownloadCleanup() {
 
     // Test 4: Get updated storage stats
     console.log('\n📊 Getting updated storage statistics...')
-    const updatedStats = await downloadCleanupService.getStorageStats()
+    const updatedStats = await downloadCleanupService.getCleanupStats()
     console.log('Updated stats:', {
       totalFiles: updatedStats.totalFiles,
-      totalSizeMB: Math.round(updatedStats.totalSize / (1024 * 1024) * 100) / 100,
+      oldFiles: updatedStats.oldFiles,
+      estimatedCleanupSizeMB: Math.round(updatedStats.estimatedCleanupSize / (1024 * 1024) * 100) / 100,
       filesAdded: updatedStats.totalFiles - initialStats.totalFiles
     })
 
@@ -86,10 +86,11 @@ async function testDownloadCleanup() {
 
     // Test 6: Get final storage stats
     console.log('\n📊 Getting final storage statistics...')
-    const finalStats = await downloadCleanupService.getStorageStats()
+    const finalStats = await downloadCleanupService.getCleanupStats()
     console.log('Final stats:', {
       totalFiles: finalStats.totalFiles,
-      totalSizeMB: Math.round(finalStats.totalSize / (1024 * 1024) * 100) / 100,
+      oldFiles: finalStats.oldFiles,
+      estimatedCleanupSizeMB: Math.round(finalStats.estimatedCleanupSize / (1024 * 1024) * 100) / 100,
       filesRemoved: updatedStats.totalFiles - finalStats.totalFiles
     })
 

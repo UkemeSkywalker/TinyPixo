@@ -138,13 +138,10 @@ class S3BucketBrowser {
       }
 
       // Convert stream to buffer
-      const chunks: Uint8Array[] = []
-      const reader = response.Body.getReader()
+      const chunks: Buffer[] = []
       
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        chunks.push(value)
+      for await (const chunk of response.Body as any) {
+        chunks.push(chunk)
       }
 
       const buffer = Buffer.concat(chunks)

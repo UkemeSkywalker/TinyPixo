@@ -2,9 +2,6 @@
 const nextConfig = {
   output: 'standalone',
   serverExternalPackages: ['sharp'],
-  experimental: {
-    serverComponentsExternalPackages: ['sharp'],
-  },
 
   async headers() {
     return [

@@ -15,9 +15,9 @@ const dynamodbClient = new DynamoDBClient({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const { jobId } = params
+  const { jobId } = await params
 
   console.log(`[API] GET /api/job-status/${jobId} - Retrieving job details`)
 
