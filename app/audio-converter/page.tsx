@@ -62,58 +62,79 @@ export default function AudioConverter() {
     const fileId = `${Date.now()}-${crypto.randomUUID()}`;
     let progressInterval: NodeJS.Timeout | null = null;
 
+    // Progress polling setup for large files (>5MB)
+    let initialDelayTimeout: NodeJS.Timeout | null = null;
+    let isPollingActive = true;
+
+    const cleanupProgressPolling = () => {
+      console.log("[Upload Progress] Cleaning up progress polling");
+      isPollingActive = false;
+      if (initialDelayTimeout) {
+        clearTimeout(initialDelayTimeout);
+        initialDelayTimeout = null;
+        console.log("[Upload Progress] Cleared initial delay timeout");
+      }
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+        console.log("[Upload Progress] Cleared progress interval");
+      }
+    };
+
     try {
       console.log(
         `[Upload] Starting upload for file: ${file.name} (${file.size} bytes) with fileId: ${fileId}`
       );
 
-      // Start progress polling for large files (>5MB) after a short delay
       if (file.size > 5 * 1024 * 1024) {
         let pollAttempts = 0;
         const maxPollAttempts = 3;
 
-        // Wait a bit for upload to initialize
-        setTimeout(() => {
-          progressInterval = setInterval(async () => {
-            try {
-              const progressResponse = await fetch(
-                `/api/upload-progress?fileId=${fileId}`
-              );
-              if (progressResponse.ok) {
-                const progressData = await progressResponse.json();
-                console.log(
-                  `[Upload Progress] ${progressData.progress}% (${progressData.completedChunks}/${progressData.totalChunks} chunks)`
-                );
-                setUploadProgress(Math.min(progressData.progress, 99)); // Cap at 99% until upload completes
-                pollAttempts = 0; // Reset on success
-              } else if (progressResponse.status === 404) {
-                // Upload not started yet, this is normal
-                console.log("[Upload Progress] Upload not started yet");
-              } else {
-                throw new Error(
-                  `Progress API returned ${progressResponse.status}`
-                );
-              }
-            } catch (error) {
-              pollAttempts++;
-              console.warn(
-                `[Upload Progress] Failed to fetch progress (attempt ${pollAttempts}/${maxPollAttempts}):`,
-                error
-              );
+        const pollProgress = async () => {
+          if (!isPollingActive) return;
 
-              // Stop polling after too many failures
-              if (pollAttempts >= maxPollAttempts) {
-                console.warn(
-                  "[Upload Progress] Too many polling failures, stopping progress updates"
-                );
-                if (progressInterval) {
-                  clearInterval(progressInterval);
-                  progressInterval = null;
-                }
-              }
+          try {
+            const progressResponse = await fetch(
+              `/api/upload-progress?fileId=${fileId}`
+            );
+            if (progressResponse.ok) {
+              const progressData = await progressResponse.json();
+              console.log(
+                `[Upload Progress] ${progressData.progress}% (${progressData.completedChunks}/${progressData.totalChunks} chunks)`
+              );
+              setUploadProgress(Math.min(progressData.progress, 99));
+              pollAttempts = 0;
+            } else if (progressResponse.status === 404) {
+              console.log("[Upload Progress] Upload not started yet");
+            } else {
+              throw new Error(
+                `Progress API returned ${progressResponse.status}`
+              );
             }
-          }, 750); // Poll every 750ms to reduce load
-        }, 1000); // Start polling after 1 second
+          } catch (error) {
+            pollAttempts++;
+            console.warn(
+              `[Upload Progress] Failed to fetch progress (attempt ${pollAttempts}/${maxPollAttempts}):`,
+              error
+            );
+
+            if (pollAttempts >= maxPollAttempts) {
+              console.warn(
+                "[Upload Progress] Too many polling failures, stopping progress updates"
+              );
+              cleanupProgressPolling();
+            }
+          }
+        };
+
+        const startPolling = () => {
+          if (!isPollingActive) return;
+          console.log("[Upload Progress] Starting progress polling");
+          progressInterval = setInterval(pollProgress, 750);
+        };
+
+        // Start polling after a delay
+        initialDelayTimeout = setTimeout(startPolling, 1000);
       }
 
       const formData = new FormData();
@@ -152,9 +173,7 @@ export default function AudioConverter() {
       setPhase("error");
     } finally {
       // Clear progress polling
-      if (progressInterval) {
-        clearInterval(progressInterval);
-      }
+      cleanupProgressPolling();
       setIsUploading(false);
     }
   };
@@ -394,7 +413,9 @@ export default function AudioConverter() {
           error.message.includes("not completed yet")
         ) {
           console.log(
-            `[Download] Retrying download in ${Math.round(retryDelay)}ms (attempt ${attempt}/${maxRetries})`
+            `[Download] Retrying download in ${Math.round(
+              retryDelay
+            )}ms (attempt ${attempt}/${maxRetries})`
           );
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
           continue;
