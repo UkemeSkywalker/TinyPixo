@@ -10,7 +10,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
  */
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
-  
+
   try {
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
     const accessValidation = await validateDownloadAccess(jobId)
     if (!accessValidation.valid) {
       console.log(`[Download] Access validation failed: ${accessValidation.error}`)
-      return NextResponse.json({ 
-        error: accessValidation.error 
+      return NextResponse.json({
+        error: accessValidation.error
       }, { status: accessValidation.statusCode })
     }
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     if (presigned) {
       const presignedUrl = await generatePresignedUrl(job.outputS3Location!.bucket, job.outputS3Location!.key)
       console.log(`[Download] Generated presigned URL for job ${jobId}`)
-      
+
       return NextResponse.json({
         presignedUrl,
         filename: generateFilename(jobId, job.format),
@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     const duration = Date.now() - startTime
     console.error(`[Download] Error after ${duration}ms:`, error)
-    
-    return NextResponse.json({ 
+
+    return NextResponse.json({
       error: 'Failed to download file',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
@@ -89,12 +89,33 @@ async function validateDownloadAccess(jobId: string): Promise<{
     // Check if conversion is completed
     if (job.status !== JobStatus.COMPLETED) {
       console.log(`[Download] Job ${jobId} status check failed - current status: ${job.status}, expected: ${JobStatus.COMPLETED}`)
+
+      // Provide more specific error messages
+      let errorMessage: string
+      let statusCode: number
+
+      switch (job.status) {
+        case JobStatus.FAILED:
+          errorMessage = job.error || 'Conversion failed'
+          statusCode = 410
+          break
+        case JobStatus.PROCESSING:
+          errorMessage = 'Conversion is still in progress, please wait'
+          statusCode = 400
+          break
+        case JobStatus.CREATED:
+          errorMessage = 'Conversion has not started yet'
+          statusCode = 400
+          break
+        default:
+          errorMessage = 'Conversion not completed yet'
+          statusCode = 400
+      }
+
       return {
         valid: false,
-        error: job.status === JobStatus.FAILED 
-          ? 'Conversion failed' 
-          : 'Conversion not completed yet',
-        statusCode: job.status === JobStatus.FAILED ? 410 : 400
+        error: errorMessage,
+        statusCode
       }
     }
 
@@ -172,11 +193,11 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
       start(controller) {
         // Handle different stream types from AWS SDK
         const stream = response.Body as any
-        
+
         if (stream.getReader) {
           // If it's already a ReadableStream
           const reader = stream.getReader()
-          
+
           function pump(): Promise<void> {
             return reader.read().then(({ done, value }) => {
               if (done) {
@@ -190,18 +211,18 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
               controller.error(error)
             })
           }
-          
+
           return pump()
         } else {
           // Handle Node.js Readable stream
           stream.on('data', (chunk: any) => {
             controller.enqueue(new Uint8Array(chunk))
           })
-          
+
           stream.on('end', () => {
             controller.close()
           })
-          
+
           stream.on('error', (error: any) => {
             console.error('[Download] Stream error:', error)
             controller.error(error)
@@ -212,7 +233,7 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
 
     const filename = generateFilename(jobId, format)
     const contentType = getContentType(format)
-    
+
     const duration = Date.now() - startTime
     console.log(`[Download] Stream setup completed in ${duration}ms, starting file transfer: ${filename}`)
 
@@ -251,7 +272,7 @@ async function generatePresignedUrl(bucket: string, key: string): Promise<string
     })
 
     // Generate presigned URL valid for 1 hour
-    const presignedUrl = await getSignedUrl(s3Client, command, { 
+    const presignedUrl = await getSignedUrl(s3Client, command, {
       expiresIn: 3600 // 1 hour
     })
 

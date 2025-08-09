@@ -261,8 +261,9 @@ async function handleFormUpload(request: NextRequest, bucketName: string) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
 
-    // Generate unique file ID and S3 key
-    const fileId = generateFileId()
+    // Get fileId from form data or generate one
+    const providedFileId = formData.get('fileId') as string
+    const fileId = providedFileId || generateFileId()
     const extension = getFileExtension(file.name)
     const s3Key = `uploads/${fileId}.${extension}`
 

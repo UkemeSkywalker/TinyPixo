@@ -303,8 +303,20 @@ async function startConversionProcess(job: any, requestData: ConversionRequest):
       // Update job status to completed with output location
       await updateJobStatus(jobId, JobStatus.COMPLETED, conversionResult.outputS3Location)
 
-      // Add a small delay to ensure DynamoDB consistency before marking progress complete
-      await new Promise(resolve => setTimeout(resolve, 100))
+      // Add a delay to ensure DynamoDB consistency before marking progress complete
+      await new Promise(resolve => setTimeout(resolve, 250))
+
+      // Verify the job status was updated before marking progress complete
+      try {
+        const verifyJob = await jobService.getJob(jobId)
+        if (verifyJob?.status !== JobStatus.COMPLETED) {
+          console.warn(`[ConversionAPI] Job status verification failed for ${jobId}, expected COMPLETED but got ${verifyJob?.status}`)
+          // Add additional delay and retry once
+          await new Promise(resolve => setTimeout(resolve, 250))
+        }
+      } catch (error) {
+        console.warn(`[ConversionAPI] Job status verification error for ${jobId}:`, error)
+      }
 
       // Mark progress as complete
       await progressService.markComplete(jobId)
