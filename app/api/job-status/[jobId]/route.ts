@@ -3,14 +3,13 @@ import { NextRequest, NextResponse } from 'next/server'
 // Simple inline job service for this endpoint to avoid import issues
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb'
 import { unmarshall } from '@aws-sdk/util-dynamodb'
+import { getEnvironmentConfig } from '../../../../lib/environment'
 
+const config = getEnvironmentConfig()
 const dynamodbClient = new DynamoDBClient({
-  region: 'us-east-1',
-  endpoint: 'http://localhost:8000',
-  credentials: {
-    accessKeyId: 'test',
-    secretAccessKey: 'test'
-  }
+  region: config.dynamodb.region,
+  ...(config.dynamodb.endpoint && { endpoint: config.dynamodb.endpoint }),
+  ...(config.dynamodb.credentials && { credentials: config.dynamodb.credentials })
 })
 
 export async function GET(
