@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     
     console.log(`[Progress API] Request for jobId: ${jobId}`)
     
-    // Get progress data using Redis-first, DynamoDB-fallback strategy
+    // Get progress data using DynamoDB-only strategy (with job service fallback)
     const progressData = await progressService.getProgress(jobId)
     
     if (!progressData) {

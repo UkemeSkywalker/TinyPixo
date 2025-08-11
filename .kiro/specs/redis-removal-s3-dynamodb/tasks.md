@@ -31,7 +31,7 @@
     - **Upload completion properly reflected in frontend interface**
   - _Requirements: 1.1, 1.3, 5.1, 5.2, 5.3, 9.2_
 
-- [ ] 3. Replace Redis progress tracking in audio conversion workflow
+- [x] 3. Replace Redis progress tracking in audio conversion workflow
   - Update FFmpeg progress parsing to write directly to DynamoDB
   - Modify conversion process to use DynamoDB-only progress service
   - Implement progress throttling to optimize DynamoDB write costs
@@ -48,7 +48,25 @@
     - **Error states properly displayed in frontend when conversion fails**
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.3_
 
-- [ ] 4. Remove all Redis dependencies from AWS services initialization
+- [ ] 4. Implement download service for converted audio files
+  - Create download API endpoint that retrieves converted files from S3
+  - Update UI to display converted files with download buttons in the "Converted" section
+  - Implement file listing functionality to show completed conversions
+  - Add proper file metadata display (name, size, format, conversion date)
+  - **Frontend Integration:** Update audio converter page to show converted files immediately after completion
+  - Test download functionality with **real AWS S3** to verify file retrieval works correctly
+  - **UI Testing:** Convert audio files and verify they appear in converted section with working download links
+  - **Validation Criteria:**
+    - Download API endpoint successfully retrieves files from S3
+    - Converted files appear in UI immediately after conversion completion
+    - Download buttons work and serve correct file content with proper headers
+    - File metadata (name, size, format) displayed accurately in converted section
+    - **Frontend automatically refreshes converted section when conversion completes**
+    - **Download links work without errors and serve files with correct MIME types**
+    - **Converted section shows "No converted files" message when empty**
+  - _Requirements: 3.1, 3.2, 3.3, 5.1, 9.2_
+
+- [ ] 5. Remove all Redis dependencies from AWS services initialization
   - Update aws-services.ts to remove Redis client initialization
   - Remove Redis configuration from environment.ts
   - Update service initialization to skip Redis setup entirely
@@ -65,7 +83,7 @@
     - **No Redis error messages displayed in browser console or UI**
   - _Requirements: 4.1, 4.2, 7.1, 7.2, 7.3, 9.1_
 
-- [ ] 5. Update API routes to use DynamoDB-only progress service
+- [ ] 6. Update API routes to use DynamoDB-only progress service
   - Modify /api/progress route to query DynamoDB directly
   - Update /api/upload-progress route to use new DynamoDB-based tracking
   - Remove Redis fallback logic from all API endpoints
@@ -82,7 +100,7 @@
     - **No API-related errors visible in browser console during normal usage**
   - _Requirements: 1.2, 2.5, 4.3, 9.1, 9.2_
 
-- [ ] 6. Implement DynamoDB-based cleanup system
+- [ ] 7. Implement DynamoDB-based cleanup system
   - Create cleanup service that scans DynamoDB for expired records
   - Implement S3 file cleanup for expired jobs
   - Add cleanup scheduling and error handling
@@ -99,7 +117,7 @@
     - **No cleanup-related errors visible to users in the interface**
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 9.4_
 
-- [ ] 7. Update environment configuration and deployment files
+- [ ] 8. Update environment configuration and deployment files
   - Remove Redis environment variables from apprunner.yaml
   - Update Docker configurations to remove Redis dependencies
   - Modify environment detection to skip Redis configuration
@@ -111,7 +129,7 @@
     - Application works identically in local, Docker, and production environments
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 9.5_
 
-- [ ] 8. Remove Redis dependencies from package.json and imports
+- [ ] 9. Remove Redis dependencies from package.json and imports
   - Remove redis package from dependencies
   - Clean up all Redis-related imports across the codebase
   - Remove Redis-related types and interfaces
@@ -123,7 +141,7 @@
     - Bundle size reduced by removing Redis dependencies
   - _Requirements: 4.1, 4.4, 7.1, 9.1_
 
-- [ ] 9. Update and fix all test files for DynamoDB-only architecture
+- [ ] 10. Update and fix all test files for DynamoDB-only architecture
   - Replace Redis mocks with DynamoDB mocks in all test files
   - Update progress service tests to test DynamoDB operations
   - Fix API route tests to use DynamoDB-based progress tracking
@@ -135,7 +153,7 @@
     - Test execution time remains reasonable without Redis setup/teardown
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 9.1_
 
-- [ ] 10. Optimize DynamoDB performance and implement caching
+- [ ] 11. Optimize DynamoDB performance and implement caching
   - Add in-memory caching layer for frequently accessed progress data
   - Implement batch operations for multiple progress updates
   - Add query optimization and projection expressions
@@ -147,7 +165,7 @@
     - Performance metrics show improvement over baseline measurements
   - _Requirements: 2.5, 5.4, 9.1, 9.3_
 
-- [ ] 11. Add comprehensive error handling and retry logic
+- [ ] 12. Add comprehensive error handling and retry logic
   - Implement exponential backoff for DynamoDB operations
   - Add graceful degradation when DynamoDB is temporarily unavailable
   - Create meaningful error messages for different failure scenarios
@@ -159,7 +177,7 @@
     - Error handling tested with network timeouts, throttling, and service unavailability
   - _Requirements: 7.5, 8.4, 8.5, 9.1_
 
-- [ ] 12. Update documentation and clean up Redis references
+- [ ] 13. Update documentation and clean up Redis references
   - Remove Redis setup instructions from README.md
   - Update architecture diagrams to show DynamoDB-only design
   - Clean up Redis-related documentation and troubleshooting guides

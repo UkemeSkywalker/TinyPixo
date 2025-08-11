@@ -240,7 +240,10 @@ export class DynamoDBProgressService {
       await this.executeWithRetry(async () => {
         await this.client.send(new PutItemCommand({
           TableName: this.PROGRESS_TABLE,
-          Item: marshall(progressData, { convertClassInstanceToMap: true })
+          Item: marshall(progressData, { 
+            convertClassInstanceToMap: true,
+            removeUndefinedValues: true 
+          })
         }))
       })
       
@@ -326,7 +329,10 @@ export class DynamoDBProgressService {
       await this.executeWithRetry(async () => {
         await this.client.send(new PutItemCommand({
           TableName: this.UPLOADS_TABLE,
-          Item: marshall(uploadData, { convertClassInstanceToMap: true })
+          Item: marshall(uploadData, { 
+            convertClassInstanceToMap: true,
+            removeUndefinedValues: true 
+          })
         }))
       })
       
@@ -386,13 +392,27 @@ export class DynamoDBProgressService {
       if (progressInfo.duration && !processInfo.estimatedDuration) {
         processInfo.estimatedDuration = progressInfo.duration
         console.log(`[DynamoDBProgressService] Duration detected for job ${jobId}: ${progressInfo.duration}s`)
+        
+        // Update progress with duration info immediately (not throttled)
+        const durationProgressData: ProgressData = {
+          jobId,
+          progress: 5, // Small progress bump when duration is detected
+          stage: 'analyzing audio duration',
+          totalDuration: this.formatSecondsToTime(progressInfo.duration),
+          ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
+          updatedAt: Date.now()
+        }
+        
+        await this.setProgress(jobId, durationProgressData)
+        console.log(`[DynamoDBProgressService] Duration progress updated for job ${jobId}: ${progressInfo.duration}s`)
       }
 
       // For progress updates with currentTime, check throttling
       if (progressInfo.currentTime !== undefined) {
         // Throttle progress updates to reduce DynamoDB write costs
         // Update every 1-2 seconds instead of every stderr line
-        const shouldUpdate = (Date.now() - processInfo.lastProgressTime) >= 1000 // 1 second throttling
+        const timeSinceLastUpdate = Date.now() - processInfo.lastProgressTime
+        const shouldUpdate = timeSinceLastUpdate >= 1500 // 1.5 second throttling for optimal cost/UX balance
 
         if (!shouldUpdate) {
           return
@@ -416,7 +436,10 @@ export class DynamoDBProgressService {
         // Store progress in DynamoDB
         await this.setProgress(jobId, dynamoProgressData)
 
-        console.log(`[DynamoDBProgressService] FFmpeg progress updated for job ${jobId}: ${dynamoProgressData.progress}% (${dynamoProgressData.stage})`)
+        console.log(`[DynamoDBProgressService] FFmpeg progress updated for job ${jobId}: ${dynamoProgressData.progress}% (${dynamoProgressData.stage}) - throttled after ${timeSinceLastUpdate}ms`)
+        
+        // Update the last progress time to maintain throttling
+        processInfo.lastProgressTime = Date.now()
       }
     } catch (error) {
       console.error(`[DynamoDBProgressService] Failed to process FFmpeg stderr for job ${jobId}:`, error)
@@ -473,6 +496,18 @@ export class DynamoDBProgressService {
    */
   getSupportedFormats() {
     return ffmpegProgressParser.getSupportedFormats()
+  }
+
+  /**
+   * Format seconds to HH:MM:SS.ms string
+   */
+  private formatSecondsToTime(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = Math.floor(totalSeconds % 60)
+    const centiseconds = Math.floor((totalSeconds % 1) * 100)
+
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`
   }
 
   /**

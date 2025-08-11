@@ -27,15 +27,27 @@ export async function initializeS3(): Promise<void> {
     const bucketName = process.env.S3_BUCKET_NAME || 'audio-conversion-bucket'
 
     try {
-        // Check if bucket exists
+        // Check if bucket exists and we have access to it
         await s3Client.send(new HeadBucketCommand({ Bucket: bucketName }))
-        console.log(`S3 bucket '${bucketName}' already exists`)
-    } catch (error) {
-        // Bucket doesn't exist, create it
-        console.log(`Creating S3 bucket '${bucketName}'...`)
-        await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }))
-
-        console.log(`S3 bucket '${bucketName}' created (folders will be created when files are uploaded)`)
+        console.log(`S3 bucket '${bucketName}' already exists and is accessible`)
+    } catch (error: any) {
+        if (error.name === 'NotFound') {
+            // Bucket doesn't exist, create it
+            console.log(`Creating S3 bucket '${bucketName}'...`)
+            try {
+                await s3Client.send(new CreateBucketCommand({ Bucket: bucketName }))
+                console.log(`S3 bucket '${bucketName}' created successfully`)
+            } catch (createError: any) {
+                if (createError.name === 'BucketAlreadyExists') {
+                    throw new Error(`S3 bucket name '${bucketName}' is already taken globally. Please use a unique bucket name in your S3_BUCKET_NAME environment variable.`)
+                }
+                throw createError
+            }
+        } else if (error.name === 'Forbidden') {
+            throw new Error(`S3 bucket '${bucketName}' exists but you don't have access to it. Please use a different bucket name in your S3_BUCKET_NAME environment variable.`)
+        } else {
+            throw error
+        }
     }
 }
 

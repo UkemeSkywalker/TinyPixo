@@ -150,6 +150,39 @@ export class StreamingConversionService {
             // Connect streams: S3 Input -> FFmpeg -> S3 Output
             inputStream.pipe(ffmpegProcess.stdin!)
             ffmpegProcess.stdout!.pipe(outputStream)
+            
+            // Ensure FFmpeg stdin is closed when input stream ends
+            inputStream.on('end', () => {
+                console.log(`[StreamingConversionService] S3 input stream ended for job ${job.jobId}, closing FFmpeg stdin`)
+                if (ffmpegProcess.stdin && !ffmpegProcess.stdin.destroyed) {
+                    ffmpegProcess.stdin.end()
+                }
+            })
+            
+            inputStream.on('error', (error) => {
+                console.error(`[StreamingConversionService] S3 input stream error for job ${job.jobId}:`, error)
+                if (ffmpegProcess.stdin && !ffmpegProcess.stdin.destroyed) {
+                    ffmpegProcess.stdin.destroy()
+                }
+            })
+            
+            // Handle FFmpeg stdout end to ensure proper cleanup
+            ffmpegProcess.stdout!.on('end', () => {
+                console.log(`[StreamingConversionService] FFmpeg stdout ended for job ${job.jobId}`)
+            })
+            
+            ffmpegProcess.stdout!.on('close', () => {
+                console.log(`[StreamingConversionService] FFmpeg stdout closed for job ${job.jobId}`)
+            })
+            
+            // Handle output stream events
+            outputStream.on('finish', () => {
+                console.log(`[StreamingConversionService] Output stream finished for job ${job.jobId}`)
+            })
+            
+            outputStream.on('end', () => {
+                console.log(`[StreamingConversionService] Output stream ended for job ${job.jobId}`)
+            })
 
             // Monitor FFmpeg stderr for progress
             this.setupProgressMonitoring(job.jobId, ffmpegProcess, processInfo, job.inputS3Location.size, outputStream)
@@ -199,8 +232,12 @@ export class StreamingConversionService {
                     size: actualSize
                 }
 
-                // Mark progress as complete
-                await progressService.markComplete(job.jobId)
+                // Update progress to near completion - final completion will be handled by the API route
+                await progressService.setProgress(job.jobId, {
+                    jobId: job.jobId,
+                    progress: 98,
+                    stage: 'conversion completed, finalizing'
+                })
 
                 console.log(`[StreamingConversionService] Streaming conversion completed for job ${job.jobId}: ${outputKey}`)
 
@@ -296,7 +333,12 @@ export class StreamingConversionService {
                 size: outputBuffer.length
             }
 
-            await progressService.markComplete(job.jobId)
+            // Update progress to near completion - final completion will be handled by the API route
+            await progressService.setProgress(job.jobId, {
+                jobId: job.jobId,
+                progress: 98,
+                stage: 'file conversion completed, finalizing'
+            })
 
             console.log(`[StreamingConversionService] File-based conversion completed for job ${job.jobId}: ${outputKey}`)
 
@@ -442,7 +484,7 @@ export class StreamingConversionService {
     }
 
     /**
-     * Set up progress monitoring for FFmpeg process
+     * Set up progress monitoring for FFmpeg process with DynamoDB-optimized throttling
      */
     private setupProgressMonitoring(
         jobId: string,
@@ -456,35 +498,6 @@ export class StreamingConversionService {
             return
         }
 
-        // Set up synthetic progress updates for very fast conversions
-        let lastSyntheticProgress = 40
-        const progressInterval = setInterval(async () => {
-            try {
-                const elapsedTime = Date.now() - processInfo.startTime
-
-                // Provide synthetic progress updates every 500ms for better granularity
-                if (elapsedTime > 500 && !ffmpegProcess.killed) {
-                    // Increment progress gradually
-                    lastSyntheticProgress = Math.min(lastSyntheticProgress + 5, 85) // Increment by 5%, cap at 85%
-
-                    await progressService.setProgress(jobId, {
-                        jobId,
-                        progress: lastSyntheticProgress,
-                        stage: 'streaming conversion in progress',
-                        currentTime: `${(elapsedTime / 1000).toFixed(1)}s`,
-                        estimatedTimeRemaining: Math.max(Math.ceil((10000 - elapsedTime) / 1000), 1)
-                    })
-                }
-            } catch (error) {
-                console.error(`[StreamingConversionService] Synthetic progress update error for job ${jobId}:`, error)
-            }
-        }, 500) // Update every 500ms for better granularity
-
-        // Clean up interval when process exits
-        ffmpegProcess.on('exit', () => {
-            clearInterval(progressInterval)
-        })
-
         // Set initial progress
         progressService.setProgress(jobId, {
             jobId,
@@ -494,6 +507,7 @@ export class StreamingConversionService {
             console.error(`[StreamingConversionService] Initial progress update error for job ${jobId}:`, error)
         })
 
+        // Process FFmpeg stderr for real-time progress updates
         ffmpegProcess.stderr.on('data', (data: Buffer) => {
             const stderrLine = data.toString()
 
@@ -502,6 +516,7 @@ export class StreamingConversionService {
             for (const line of lines) {
                 if (line.trim()) {
                     // Process FFmpeg stderr asynchronously to avoid blocking
+                    // The DynamoDB progress service handles throttling internally
                     progressService.processFFmpegStderr(jobId, line, processInfo, fallbackFileSize)
                         .catch(error => {
                             console.error(`[StreamingConversionService] Progress monitoring error for job ${jobId}:`, error)
@@ -512,13 +527,15 @@ export class StreamingConversionService {
 
         // Add progress updates for different stages of the streaming process
         let outputDataReceived = false
+        let uploadStarted = false
+
         ffmpegProcess.stdout?.on('data', () => {
             // When we start receiving output data, update progress (only once)
             if (!outputDataReceived) {
                 outputDataReceived = true
                 progressService.setProgress(jobId, {
                     jobId,
-                    progress: 50,
+                    progress: Math.max(50, processInfo.lastProgressTime ? 50 : 30), // Don't go backwards
                     stage: 'processing audio stream'
                 }).catch(error => {
                     console.error(`[StreamingConversionService] Stream progress update error for job ${jobId}:`, error)
@@ -528,13 +545,12 @@ export class StreamingConversionService {
 
         // Monitor S3 upload progress (only if outputStream is provided)
         if (outputStream) {
-            let uploadStarted = false
             outputStream.on('data', () => {
                 if (!uploadStarted) {
                     uploadStarted = true
                     progressService.setProgress(jobId, {
                         jobId,
-                        progress: 70,
+                        progress: Math.max(70, processInfo.lastProgressTime ? 70 : 60), // Don't go backwards
                         stage: 'uploading to S3'
                     }).catch(error => {
                         console.error(`[StreamingConversionService] Upload progress update error for job ${jobId}:`, error)
@@ -543,7 +559,21 @@ export class StreamingConversionService {
             })
         }
 
-        console.log(`[StreamingConversionService] Progress monitoring set up for job ${jobId}`)
+        // Handle process completion
+        ffmpegProcess.on('exit', (code) => {
+            if (code === 0) {
+                // Update progress to near completion before final processing
+                progressService.setProgress(jobId, {
+                    jobId,
+                    progress: 95,
+                    stage: 'finalizing conversion'
+                }).catch(error => {
+                    console.error(`[StreamingConversionService] Final progress update error for job ${jobId}:`, error)
+                })
+            }
+        })
+
+        console.log(`[StreamingConversionService] DynamoDB-optimized progress monitoring set up for job ${jobId}`)
     }
 
     /**
@@ -557,6 +587,7 @@ export class StreamingConversionService {
         return new Promise((resolve) => {
             let ffmpegExited = false
             let s3UploadCompleted = false
+            let ffmpegStdoutEnded = false
             let ffmpegExitCode: number | null = null
             let s3UploadResult: any = null
             let error: string | null = null
@@ -567,12 +598,30 @@ export class StreamingConversionService {
                 ffmpegExitCode = code
 
                 console.log(`[StreamingConversionService] FFmpeg process exited for job ${jobId}: code=${code}, signal=${signal}`)
+                console.log(`[StreamingConversionService] FFmpeg exit status for job ${jobId}: ffmpegExited=${ffmpegExited}, s3UploadCompleted=${s3UploadCompleted}`)
 
-                if (code !== 0) {
+                // Don't treat SIGTERM/SIGKILL as errors since we force-killed it after successful completion
+                if (code !== 0 && signal !== 'SIGTERM' && signal !== 'SIGKILL') {
                     error = `FFmpeg process failed with exit code ${code}${signal ? ` (signal: ${signal})` : ''}`
                 }
 
                 checkCompletion()
+            })
+            
+            // Also handle the 'close' event as a backup
+            ffmpegProcess.on('close', (code, signal) => {
+                if (!ffmpegExited) {
+                    console.log(`[StreamingConversionService] FFmpeg process closed (backup handler) for job ${jobId}: code=${code}, signal=${signal}`)
+                    ffmpegExited = true
+                    ffmpegExitCode = code
+                    
+                    // Don't treat SIGTERM/SIGKILL as errors since we force-killed it after successful completion
+                    if (code !== 0 && signal !== 'SIGTERM' && signal !== 'SIGKILL') {
+                        error = `FFmpeg process failed with exit code ${code}${signal ? ` (signal: ${signal})` : ''}`
+                    }
+                    
+                    checkCompletion()
+                }
             })
 
             // Handle FFmpeg process error
@@ -589,28 +638,51 @@ export class StreamingConversionService {
                     s3UploadCompleted = true
                     s3UploadResult = result
                     console.log(`[StreamingConversionService] S3 upload completed for job ${jobId}: ${result.Location}`)
+                    console.log(`[StreamingConversionService] S3 upload status for job ${jobId}: ffmpegExited=${ffmpegExited}, s3UploadCompleted=${s3UploadCompleted}`)
                     checkCompletion()
                 })
                 .catch((err) => {
                     s3UploadCompleted = true
                     error = `S3 upload failed: ${err.message}`
                     console.error(`[StreamingConversionService] S3 upload error for job ${jobId}:`, err)
+                    console.log(`[StreamingConversionService] S3 upload error status for job ${jobId}: ffmpegExited=${ffmpegExited}, s3UploadCompleted=${s3UploadCompleted}`)
                     checkCompletion()
                 })
 
+            // Note: FFmpeg stdout end is already tracked in setupProgressMonitoring
+
             function checkCompletion() {
-                if (ffmpegExited && s3UploadCompleted) {
-                    if (error || ffmpegExitCode !== 0) {
-                        resolve({
-                            success: false,
-                            error: error || `FFmpeg failed with exit code ${ffmpegExitCode}`
-                        })
-                    } else {
-                        resolve({
-                            success: true,
-                            outputSize: s3UploadResult?.ContentLength || 0
-                        })
+                console.log(`[StreamingConversionService] Checking completion for job ${jobId}: ffmpegExited=${ffmpegExited}, s3UploadCompleted=${s3UploadCompleted}, error=${error}`)
+                
+                if (s3UploadCompleted && !error) {
+                    // S3 upload completed successfully - this means conversion was successful
+                    // Clean up FFmpeg process if it's still running
+                    if (!ffmpegExited && ffmpegProcess.pid && !ffmpegProcess.killed) {
+                        console.log(`[StreamingConversionService] S3 upload completed successfully, cleaning up FFmpeg process for job ${jobId}`)
+                        ffmpegProcess.kill('SIGTERM')
+                        
+                        // Force kill after a short delay if needed
+                        setTimeout(() => {
+                            if (!ffmpegExited && ffmpegProcess.pid && !ffmpegProcess.killed) {
+                                console.log(`[StreamingConversionService] Force killing FFmpeg process for job ${jobId}`)
+                                ffmpegProcess.kill('SIGKILL')
+                            }
+                        }, 1000)
                     }
+                    
+                    console.log(`[StreamingConversionService] Resolving with success for job ${jobId} (S3 upload completed)`)
+                    resolve({
+                        success: true,
+                        outputSize: s3UploadResult?.ContentLength || 0
+                    })
+                } else if (error) {
+                    console.log(`[StreamingConversionService] Resolving with error for job ${jobId}: ${error}`)
+                    resolve({
+                        success: false,
+                        error: error
+                    })
+                } else {
+                    console.log(`[StreamingConversionService] Still waiting for completion for job ${jobId}`)
                 }
             }
         })
