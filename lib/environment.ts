@@ -23,17 +23,10 @@ export interface DynamoDBConfig {
   }
 }
 
-export interface RedisConfig {
-  host: string
-  port: number
-  tls?: boolean
-}
-
 export interface EnvironmentConfig {
   environment: Environment
   s3: S3Config
   dynamodb: DynamoDBConfig
-  redis: RedisConfig
 }
 
 export function detectEnvironment(): Environment {
@@ -79,10 +72,6 @@ export function getEnvironmentConfig(): EnvironmentConfig {
             accessKeyId: 'test',
             secretAccessKey: 'test'
           }
-        },
-        redis: {
-          host: 'localhost',
-          port: 6379
         }
       }
       
@@ -105,10 +94,6 @@ export function getEnvironmentConfig(): EnvironmentConfig {
             accessKeyId: 'test',
             secretAccessKey: 'test'
           }
-        },
-        redis: {
-          host: 'redis',
-          port: 6379
         }
       }
       
@@ -120,11 +105,6 @@ export function getEnvironmentConfig(): EnvironmentConfig {
         },
         dynamodb: {
           region: process.env.AWS_REGION || 'us-east-1'
-        },
-        redis: {
-          host: process.env.REDIS_ENDPOINT || 'localhost',
-          port: parseInt(process.env.REDIS_PORT || '6379'),
-          tls: process.env.REDIS_TLS !== 'false' // Default to TLS for real AWS
         }
       }
       

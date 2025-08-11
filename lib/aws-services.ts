@@ -1,7 +1,7 @@
-import { S3Client, CreateBucketCommand, PutObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
+import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { DynamoDBClient, CreateTableCommand, DescribeTableCommand, UpdateTimeToLiveCommand } from '@aws-sdk/client-dynamodb'
-import { createClient, RedisClientType } from 'redis'
 import { getEnvironmentConfig, Environment } from './environment'
+import { dynamodbProgressService } from './progress-service-dynamodb'
 
 const config = getEnvironmentConfig()
 
@@ -20,71 +20,7 @@ export const dynamodbClient = new DynamoDBClient({
     credentials: config.dynamodb.credentials
 })
 
-// Redis Client
-let redisClient: RedisClientType | null = null
-
-export async function getRedisClient(): Promise<RedisClientType | null> {
-    if (!redisClient) {
-        // Check if Redis is properly configured
-        if (!process.env.REDIS_ENDPOINT && config.environment === Environment.APP_RUNNER) {
-            console.log('[Redis] No REDIS_ENDPOINT configured for App Runner, skipping Redis initialization')
-            return null
-        }
-
-        const redisUrl = config.redis.tls
-            ? `rediss://${config.redis.host}:${config.redis.port}`
-            : `redis://${config.redis.host}:${config.redis.port}`
-
-        console.log(`[Redis] Connecting to: ${redisUrl}`)
-        console.log(`[Redis] TLS enabled: ${config.redis.tls}`)
-        console.log(`[Redis] Environment: ${config.environment}`)
-
-        try {
-            redisClient = createClient({
-                url: redisUrl,
-                socket: {
-                    connectTimeout: config.environment === Environment.APP_RUNNER ? 5000 : 30000, // Fast fail in production
-                    tls: config.redis.tls, // Boolean flag for TLS
-                    rejectUnauthorized: false // For ElastiCache TLS
-                },
-                commandsQueueMaxLength: 1000
-            })
-
-            redisClient.on('error', (err) => {
-                console.error('Redis client error:', err)
-                // Don't throw here, let the connection attempt handle it
-            })
-
-            redisClient.on('connect', () => {
-                console.log('[Redis] Connected successfully')
-            })
-
-            redisClient.on('ready', () => {
-                console.log('[Redis] Client ready')
-            })
-
-            redisClient.on('reconnecting', () => {
-                console.log('[Redis] Reconnecting...')
-            })
-
-            // Add timeout wrapper for connection
-            const connectionPromise = redisClient.connect()
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Redis connection timeout')), 
-                    config.environment === Environment.APP_RUNNER ? 5000 : 30000)
-            })
-
-            await Promise.race([connectionPromise, timeoutPromise])
-            console.log('[Redis] Connection established successfully')
-        } catch (error) {
-            console.error('[Redis] Failed to connect, will use DynamoDB fallback:', error)
-            redisClient = null
-            return null
-        }
-    }
-
-    return redisClient
-}
+// Redis functionality removed - using DynamoDB-only progress service
 
 // Service initialization functions
 export async function initializeS3(): Promise<void> {
@@ -166,35 +102,14 @@ export async function initializeDynamoDB(): Promise<void> {
     }
 }
 
-export async function initializeRedis(): Promise<void> {
+export async function initializeProgressTables(): Promise<void> {
     try {
-        console.log('Connecting to Redis...')
-        const redis = await getRedisClient()
-        
-        if (!redis) {
-            console.log('Redis not available, will use DynamoDB fallback for progress tracking')
-            return
-        }
-
-        console.log('Redis client obtained, testing connection...')
-
-        // Test Redis connection
-        console.log('Setting test key...')
-        await redis.set('test-key', 'test-value')
-        console.log('Getting test key...')
-        const value = await redis.get('test-key')
-
-        if (value === 'test-value') {
-            console.log('Redis connection test successful')
-            console.log('Cleaning up test key...')
-            await redis.del('test-key')
-            console.log('Redis initialization completed successfully')
-        } else {
-            throw new Error('Redis connection test failed')
-        }
+        console.log('Initializing DynamoDB progress tracking tables...')
+        await dynamodbProgressService.initializeTables()
+        console.log('DynamoDB progress tracking tables initialized successfully')
     } catch (error) {
-        console.error('Redis initialization error, will use DynamoDB fallback:', error)
-        // Don't throw error - allow app to start with DynamoDB fallback
+        console.error('Failed to initialize progress tracking tables:', error)
+        throw error
     }
 }
 
@@ -207,15 +122,15 @@ export async function initializeAllServices(): Promise<void> {
         await initializeS3()
         console.log('Step 1: S3 initialization completed')
 
-        console.log('Step 2: Initializing DynamoDB...')
+        console.log('Step 2: Initializing DynamoDB jobs table...')
         await initializeDynamoDB()
-        console.log('Step 2: DynamoDB initialization completed')
+        console.log('Step 2: DynamoDB jobs table initialization completed')
 
-        console.log('Step 3: Initializing Redis...')
-        await initializeRedis()
-        console.log('Step 3: Redis initialization completed (or skipped with fallback)')
+        console.log('Step 3: Initializing DynamoDB progress tables...')
+        await initializeProgressTables()
+        console.log('Step 3: DynamoDB progress tables initialization completed')
 
-        console.log('🎉 All services initialized successfully!')
+        console.log('🎉 All services initialized successfully (Redis-free)!')
     } catch (error) {
         console.error('💥 Failed to initialize services:', error)
         throw error
