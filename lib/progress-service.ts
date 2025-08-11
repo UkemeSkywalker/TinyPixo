@@ -45,7 +45,11 @@ export class ProgressService {
       if (!this.redisClient) {
         console.log('[ProgressService] Initializing Redis client...')
         this.redisClient = await getRedisClient()
-        console.log('[ProgressService] Redis client initialized successfully')
+        if (this.redisClient) {
+          console.log('[ProgressService] Redis client initialized successfully')
+        } else {
+          console.log('[ProgressService] Redis not available, will use DynamoDB fallback')
+        }
       }
       return this.redisClient
     } catch (error) {

@@ -58,8 +58,15 @@ export default function AudioConverter() {
     setUploadProgress(0);
     setError(null);
 
-    // Generate a unique fileId for progress tracking
-    const fileId = `${Date.now()}-${crypto.randomUUID()}`;
+    // Generate a unique fileId for progress tracking (browser-compatible)
+    const generateUUID = () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+    const fileId = `${Date.now()}-${generateUUID()}`;
     let progressInterval: NodeJS.Timeout | null = null;
 
     // Progress polling setup for large files (>5MB)

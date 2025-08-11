@@ -40,13 +40,14 @@ run:
     - name: NODE_OPTIONS
       value: --max-http-header-size=16384 --max-old-space-size=2048
   
-  # Production AWS service endpoints (to be configured in App Runner console)
-  secrets:
+  # Production AWS service endpoints (configured as environment variables in App Runner console)
+  env:
     - name: S3_BUCKET_NAME
-      from_parameter_store: /audio-converter/s3-bucket-name
-    - name: REDIS_ENDPOINT
-      from_parameter_store: /audio-converter/redis-endpoint
-    - name: REDIS_PORT
-      from_parameter_store: /audio-converter/redis-port
-    - name: REDIS_TLS
-      from_parameter_store: /audio-converter/redis-tls
+      value: audio-conversion-app-bucket
+    # Redis disabled for App Runner due to VPC connectivity issues
+    # - name: REDIS_ENDPOINT
+    #   value: master.audio-conversion-redis.u6km1j.use1.cache.amazonaws.com
+    # - name: REDIS_PORT
+    #   value: 6379
+    # - name: REDIS_TLS
+    #   value: true
