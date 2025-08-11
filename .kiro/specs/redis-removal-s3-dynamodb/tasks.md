@@ -14,64 +14,89 @@
     - No Redis connections attempted during service initialization
   - _Requirements: 1.1, 1.2, 2.1, 4.3, 6.1, 6.2, 9.1_
 
-- [ ] 2. Implement DynamoDB-based upload progress tracking
+- [x] 2. Implement DynamoDB-based upload progress tracking
   - Create UploadProgressService for chunked upload tracking in DynamoDB
   - Replace Redis-based upload progress storage with DynamoDB operations
   - Update upload-progress API route to query DynamoDB instead of Redis
+  - **Frontend Integration:** Ensure upload progress UI components work with DynamoDB backend
   - Test with **real AWS S3** multipart uploads and verify progress accuracy
+  - **UI Testing:** Upload files through the web interface and verify real-time progress updates
   - **Validation Criteria:**
     - Upload progress stored and retrieved from DynamoDB successfully
     - Chunk-by-chunk progress updates work with real S3 multipart uploads
     - API returns accurate progress percentages during file upload
     - Upload progress data automatically expires via DynamoDB TTL
+    - **Frontend shows real-time upload progress from DynamoDB (0-100%)**
+    - **Progress bar updates smoothly during file upload through UI**
+    - **Upload completion properly reflected in frontend interface**
   - _Requirements: 1.1, 1.3, 5.1, 5.2, 5.3, 9.2_
 
 - [ ] 3. Replace Redis progress tracking in audio conversion workflow
   - Update FFmpeg progress parsing to write directly to DynamoDB
   - Modify conversion process to use DynamoDB-only progress service
   - Implement progress throttling to optimize DynamoDB write costs
+  - **Frontend Integration:** Update conversion progress UI to poll DynamoDB-based progress API
   - Test with **real AWS services** during audio conversion and verify progress updates work correctly
+  - **UI Testing:** Convert audio files through the web interface and monitor real-time progress
   - **Validation Criteria:**
     - FFmpeg progress updates stored in DynamoDB during real audio conversion
     - Progress throttling limits DynamoDB writes to reasonable frequency (1-2 seconds)
     - Conversion progress shows accurate percentages from 0% to 100%
     - Failed conversions properly marked with error details in DynamoDB
+    - **Frontend displays real-time conversion progress from DynamoDB**
+    - **Progress updates visible in UI during actual audio conversion**
+    - **Error states properly displayed in frontend when conversion fails**
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.3_
 
 - [ ] 4. Remove all Redis dependencies from AWS services initialization
   - Update aws-services.ts to remove Redis client initialization
   - Remove Redis configuration from environment.ts
   - Update service initialization to skip Redis setup entirely
+  - **Frontend Integration:** Ensure application loads and functions normally in UI without Redis
   - Test service startup without Redis and verify no connection attempts
+  - **UI Testing:** Access all pages and features through web interface to verify functionality
   - **Validation Criteria:**
     - Application starts successfully without Redis environment variables
     - No Redis connection attempts in application logs
     - Service initialization completes with only S3 and DynamoDB
     - Environment configuration works in local, Docker, and App Runner environments
+    - **Web interface loads without errors or Redis-related failures**
+    - **All UI features accessible and functional without Redis**
+    - **No Redis error messages displayed in browser console or UI**
   - _Requirements: 4.1, 4.2, 7.1, 7.2, 7.3, 9.1_
 
 - [ ] 5. Update API routes to use DynamoDB-only progress service
   - Modify /api/progress route to query DynamoDB directly
   - Update /api/upload-progress route to use new DynamoDB-based tracking
   - Remove Redis fallback logic from all API endpoints
+  - **Frontend Integration:** Verify all UI components work with updated API endpoints
   - Test all API endpoints against **live AWS DynamoDB and S3**
+  - **UI Testing:** Test all application features through web interface to ensure API integration works
   - **Validation Criteria:**
     - /api/progress returns accurate data from DynamoDB within 500ms
     - /api/upload-progress shows real-time upload progress from DynamoDB
     - API responses include proper cache headers to prevent stale data
     - All API endpoints work without Redis and return appropriate errors when data not found
+    - **Frontend successfully consumes all updated API endpoints**
+    - **UI displays accurate data from DynamoDB-based APIs**
+    - **No API-related errors visible in browser console during normal usage**
   - _Requirements: 1.2, 2.5, 4.3, 9.1, 9.2_
 
 - [ ] 6. Implement DynamoDB-based cleanup system
   - Create cleanup service that scans DynamoDB for expired records
   - Implement S3 file cleanup for expired jobs
   - Add cleanup scheduling and error handling
+  - **Frontend Integration:** Add cleanup status monitoring to admin interface (if applicable)
   - Test cleanup against **live AWS DynamoDB and S3** to verify proper deletion
+  - **UI Testing:** Verify cleanup operations don't interfere with active user sessions in UI
   - **Validation Criteria:**
     - Cleanup service successfully identifies and removes expired DynamoDB records
     - Associated S3 files are deleted when jobs are cleaned up
     - Cleanup runs without errors and logs number of cleaned resources
     - Manual cleanup execution works and can be scheduled via cron or API
+    - **Active user sessions remain unaffected during cleanup operations**
+    - **UI continues to function normally during background cleanup**
+    - **No cleanup-related errors visible to users in the interface**
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 9.4_
 
 - [ ] 7. Update environment configuration and deployment files

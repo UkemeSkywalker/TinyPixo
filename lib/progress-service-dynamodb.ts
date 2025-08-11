@@ -1,7 +1,7 @@
-import { DynamoDBClient, PutItemCommand, GetItemCommand, UpdateItemCommand, ScanCommand, DeleteItemCommand, CreateTableCommand, DescribeTableCommand, UpdateTimeToLiveCommand } from '@aws-sdk/client-dynamodb'
+import { DynamoDBClient, PutItemCommand, GetItemCommand, ScanCommand, DeleteItemCommand, CreateTableCommand, DescribeTableCommand, UpdateTimeToLiveCommand } from '@aws-sdk/client-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
-import { dynamodbClient } from './aws-services'
-import { ffmpegProgressParser, FFmpegProcessInfo, FFmpegProgressInfo } from './ffmpeg-progress-parser'
+import { ffmpegProgressParser, FFmpegProcessInfo } from './ffmpeg-progress-parser'
+import { getEnvironmentConfig } from './environment'
 
 export interface ProgressData {
   jobId: string
@@ -58,7 +58,16 @@ export class DynamoDBProgressService {
   private readonly UPLOAD_TTL = 7200 // 2 hours in seconds
 
   constructor(client?: DynamoDBClient) {
-    this.client = client || dynamodbClient
+    if (client) {
+      this.client = client
+    } else {
+      const config = getEnvironmentConfig()
+      this.client = new DynamoDBClient({
+        region: config.dynamodb.region,
+        endpoint: config.dynamodb.endpoint,
+        credentials: config.dynamodb.credentials
+      })
+    }
   }
 
   /**
@@ -97,17 +106,16 @@ export class DynamoDBProgressService {
           AttributeDefinitions: [
             { AttributeName: 'jobId', AttributeType: 'S' }
           ],
-          BillingMode: 'PAY_PER_REQUEST',
-          TimeToLiveSpecification: {
-            AttributeName: 'ttl',
-            Enabled: true
-          }
+          BillingMode: 'PAY_PER_REQUEST'
         }))
         
         console.log(`[DynamoDBProgressService] Progress table '${tableName}' created successfully`)
         
         // Wait for table to be active
         await this.waitForTableActive(tableName)
+        
+        // Configure TTL after table is active
+        await this.configureTTL(tableName)
       } else {
         throw error
       }
@@ -136,17 +144,16 @@ export class DynamoDBProgressService {
           AttributeDefinitions: [
             { AttributeName: 'fileId', AttributeType: 'S' }
           ],
-          BillingMode: 'PAY_PER_REQUEST',
-          TimeToLiveSpecification: {
-            AttributeName: 'ttl',
-            Enabled: true
-          }
+          BillingMode: 'PAY_PER_REQUEST'
         }))
         
         console.log(`[DynamoDBProgressService] Uploads table '${tableName}' created successfully`)
         
         // Wait for table to be active
         await this.waitForTableActive(tableName)
+        
+        // Configure TTL after table is active
+        await this.configureTTL(tableName)
       } else {
         throw error
       }
@@ -178,6 +185,28 @@ export class DynamoDBProgressService {
     }
     
     throw new Error(`Table '${tableName}' did not become active within ${maxAttempts} seconds`)
+  }
+
+  /**
+   * Configure TTL for a table
+   */
+  private async configureTTL(tableName: string): Promise<void> {
+    try {
+      console.log(`[DynamoDBProgressService] Configuring TTL for table '${tableName}'...`)
+      
+      await this.client.send(new UpdateTimeToLiveCommand({
+        TableName: tableName,
+        TimeToLiveSpecification: {
+          AttributeName: 'ttl',
+          Enabled: true
+        }
+      }))
+      
+      console.log(`[DynamoDBProgressService] TTL configured successfully for table '${tableName}'`)
+    } catch (error) {
+      console.error(`[DynamoDBProgressService] Failed to configure TTL for table '${tableName}':`, error)
+      // Don't throw - TTL configuration failure shouldn't break table creation
+    }
   }
 
   /**

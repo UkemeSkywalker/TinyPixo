@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { s3Client, getRedisClient } from '../../../lib/aws-services'
+import { s3Client } from '../../../lib/aws-services'
+import { dynamodbProgressService, UploadProgressData } from '../../../lib/progress-service-dynamodb'
 import {
   CreateMultipartUploadCommand,
   UploadPartCommand,
@@ -29,18 +30,7 @@ const MAX_FILE_SIZE = 500 * 1024 * 1024 // 500MB
 const MIN_CHUNK_SIZE = 5 * 1024 * 1024 // 5MB minimum for multipart
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks
 
-interface UploadProgress {
-  uploadId: string
-  fileId: string
-  fileName: string
-  totalSize: number
-  uploadedSize: number
-  totalChunks: number
-  completedChunks: number
-  parts: Array<{ ETag: string; PartNumber: number }>
-  s3Key: string
-  bucketName: string
-}
+// UploadProgressData interface is now imported from progress-service-dynamodb
 
 interface ValidationResult {
   valid: boolean
@@ -53,8 +43,8 @@ interface S3Location {
   size: number
 }
 
-// In-memory storage for upload progress (fallback when Redis is unavailable)
-const uploadProgress = new Map<string, UploadProgress>()
+// In-memory storage for upload progress (fallback when DynamoDB is unavailable)
+const uploadProgress = new Map<string, UploadProgressData>()
 
 // Utility functions
 function generateFileId(): string {
@@ -172,30 +162,24 @@ async function retryWithBackoff<T>(
 }
 
 // Progress tracking utilities
-async function storeUploadProgress(progress: UploadProgress): Promise<void> {
+async function storeUploadProgress(progress: UploadProgressData): Promise<void> {
   try {
-    const redis = await getRedisClient()
-    await redis.setEx(
-      `upload:${progress.fileId}`,
-      3600, // 1 hour TTL
-      JSON.stringify(progress)
-    )
-    console.log(`Upload progress stored in Redis for ${progress.fileId}`)
+    await dynamodbProgressService.setUploadProgress(progress.fileId, progress)
+    console.log(`Upload progress stored in DynamoDB for ${progress.fileId}`)
   } catch (error) {
-    console.warn('Failed to store progress in Redis, using in-memory fallback:', error)
+    console.warn('Failed to store progress in DynamoDB, using in-memory fallback:', error)
     uploadProgress.set(progress.fileId, progress)
   }
 }
 
-async function getUploadProgress(fileId: string): Promise<UploadProgress | null> {
+async function getUploadProgress(fileId: string): Promise<UploadProgressData | null> {
   try {
-    const redis = await getRedisClient()
-    const data = await redis.get(`upload:${fileId}`)
-    if (data) {
-      return JSON.parse(data)
+    const progress = await dynamodbProgressService.getUploadProgress(fileId)
+    if (progress) {
+      return progress
     }
   } catch (error) {
-    console.warn('Failed to get progress from Redis, checking in-memory fallback:', error)
+    console.warn('Failed to get progress from DynamoDB, checking in-memory fallback:', error)
   }
 
   return uploadProgress.get(fileId) || null
@@ -203,11 +187,15 @@ async function getUploadProgress(fileId: string): Promise<UploadProgress | null>
 
 async function deleteUploadProgress(fileId: string): Promise<void> {
   try {
-    const redis = await getRedisClient()
-    await redis.del(`upload:${fileId}`)
-    console.log(`Upload progress deleted from Redis for ${fileId}`)
+    // Mark upload as completed in DynamoDB (TTL will handle cleanup)
+    const progress = await dynamodbProgressService.getUploadProgress(fileId)
+    if (progress) {
+      progress.stage = 'completed'
+      await dynamodbProgressService.setUploadProgress(fileId, progress)
+    }
+    console.log(`Upload progress marked as completed in DynamoDB for ${fileId}`)
   } catch (error) {
-    console.warn('Failed to delete progress from Redis:', error)
+    console.warn('Failed to update progress in DynamoDB:', error)
   }
 
   uploadProgress.delete(fileId)
@@ -288,6 +276,24 @@ async function handleSimpleUpload(file: File, bucketName: string, s3Key: string,
   try {
     console.log(`Using simple upload for file ${file.name}`)
 
+    // Store initial progress BEFORE attempting S3 upload
+    const initialProgress: UploadProgressData = {
+      fileId,
+      fileName: file.name,
+      totalSize: file.size,
+      uploadedSize: 0,
+      totalChunks: 1,
+      completedChunks: 0,
+      stage: 'uploading',
+      s3Key,
+      bucketName,
+      parts: [],
+      ttl: Math.floor(Date.now() / 1000) + 7200, // 2 hours TTL
+      updatedAt: Date.now()
+    }
+    await storeUploadProgress(initialProgress)
+    console.log(`Initial upload progress stored for ${fileId}`)
+
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
@@ -306,6 +312,16 @@ async function handleSimpleUpload(file: File, bucketName: string, s3Key: string,
     })
 
     console.log(`Simple upload completed: ${s3Key}`)
+
+    // Update progress to completed
+    const completedProgress: UploadProgressData = {
+      ...initialProgress,
+      uploadedSize: file.size,
+      completedChunks: 1,
+      stage: 'completed',
+      updatedAt: Date.now()
+    }
+    await storeUploadProgress(completedProgress)
 
     return NextResponse.json({
       success: true,
@@ -330,6 +346,29 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
   try {
     console.log(`Using multipart upload for file ${file.name}`)
 
+    // Read file and calculate chunks first
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+    const totalChunks = Math.ceil(buffer.length / CHUNK_SIZE)
+
+    // Store initial progress BEFORE attempting S3 upload
+    const initialProgress: UploadProgressData = {
+      fileId,
+      fileName: file.name,
+      totalSize: file.size,
+      uploadedSize: 0,
+      totalChunks,
+      completedChunks: 0,
+      stage: 'initializing',
+      s3Key,
+      bucketName,
+      parts: [],
+      ttl: Math.floor(Date.now() / 1000) + 7200, // 2 hours TTL
+      updatedAt: Date.now()
+    }
+    await storeUploadProgress(initialProgress)
+    console.log(`Initial upload progress stored for ${fileId}`)
+
     // Initialize multipart upload
     const createResponse = await retryWithBackoff(async () => {
       return await s3Client.send(new CreateMultipartUploadCommand({
@@ -347,24 +386,14 @@ async function handleMultipartFormUpload(file: File, bucketName: string, s3Key: 
     uploadId = createResponse.UploadId!
     console.log(`Multipart upload initialized: ${uploadId}`)
 
-    // Read file and upload in chunks
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const totalChunks = Math.ceil(buffer.length / CHUNK_SIZE)
     const parts: Array<{ ETag: string; PartNumber: number }> = []
 
-    // Store initial progress
-    const progress: UploadProgress = {
+    // Update progress with upload ID and change stage to uploading
+    const progress: UploadProgressData = {
+      ...initialProgress,
       uploadId,
-      fileId,
-      fileName: file.name,
-      totalSize: file.size,
-      uploadedSize: 0,
-      totalChunks,
-      completedChunks: 0,
-      parts: [],
-      s3Key,
-      bucketName
+      stage: 'uploading',
+      updatedAt: Date.now()
     }
     await storeUploadProgress(progress)
 
@@ -506,17 +535,20 @@ async function initiateChunkedUpload(fileName: string, fileSize: number, bucketN
     const totalChunks = Math.ceil(fileSize / CHUNK_SIZE)
 
     // Store upload progress
-    const progress: UploadProgress = {
-      uploadId,
+    const progress: UploadProgressData = {
       fileId,
       fileName,
       totalSize: fileSize,
       uploadedSize: 0,
       totalChunks,
       completedChunks: 0,
-      parts: [],
+      stage: 'uploading',
+      uploadId,
       s3Key,
-      bucketName
+      bucketName,
+      parts: [],
+      ttl: Math.floor(Date.now() / 1000) + 7200, // 2 hours TTL
+      updatedAt: Date.now()
     }
     await storeUploadProgress(progress)
 

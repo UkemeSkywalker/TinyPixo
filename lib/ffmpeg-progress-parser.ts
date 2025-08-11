@@ -214,7 +214,9 @@ export class FFmpegProgressParser {
       stage,
       estimatedTimeRemaining,
       currentTime: currentTime ? this.formatSecondsToTime(currentTime) : undefined,
-      totalDuration: duration ? this.formatSecondsToTime(duration) : undefined
+      totalDuration: duration ? this.formatSecondsToTime(duration) : undefined,
+      ttl: Math.floor(Date.now() / 1000) + 3600, // 1 hour TTL
+      updatedAt: Date.now()
     }
   }
 

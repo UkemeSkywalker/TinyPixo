@@ -45,8 +45,13 @@ export function detectEnvironment(): Environment {
     return Environment.DOCKER
   }
   
-  // Default to local development
-  return Environment.LOCAL
+  // Check if we should use LocalStack (explicit opt-in only)
+  if (process.env.USE_LOCALSTACK === 'true') {
+    return Environment.LOCAL
+  }
+  
+  // Default to real AWS services (APP_RUNNER mode)
+  return Environment.APP_RUNNER
 }
 
 export function getEnvironmentConfig(): EnvironmentConfig {
@@ -101,7 +106,7 @@ export function getEnvironmentConfig(): EnvironmentConfig {
       return {
         environment,
         s3: {
-          region: process.env.AWS_REGION || 'us-east-1'
+          region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1'
         },
         dynamodb: {
           region: process.env.AWS_REGION || 'us-east-1'
