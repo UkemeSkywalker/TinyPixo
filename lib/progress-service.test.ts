@@ -54,9 +54,9 @@ describe('ProgressService', () => {
 
   beforeAll(() => {
     // Mock console methods to reduce test noise
-    vi.spyOn(console, 'log').mockImplementation(() => {})
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(console, 'log').mockImplementation(() => { })
+    vi.spyOn(console, 'warn').mockImplementation(() => { })
+    vi.spyOn(console, 'error').mockImplementation(() => { })
   })
 
   afterAll(() => {
@@ -74,19 +74,19 @@ describe('ProgressService', () => {
     }
 
     mockGetRedisClient = vi.fn().mockResolvedValue(mockRedisClient)
-    
+
     // Mock is already set up at module level
 
     // Mock the job service
     mockJobService = {
       getJob: vi.fn()
     }
-    
+
     // Mock is already set up at module level
 
     // Create fresh service instance
     progressService = new ProgressService()
-    
+
     // Clear all mocks
     vi.clearAllMocks()
   })

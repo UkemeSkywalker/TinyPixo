@@ -256,7 +256,7 @@ async function createConversionJob(inputS3Location: S3Location, requestData: Con
 }
 
 /**
- * Initialize progress tracking in Redis
+ * Initialize progress tracking in DynamoDB
  */
 async function initializeProgressTracking(jobId: string): Promise<void> {
   try {

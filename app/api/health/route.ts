@@ -1,11 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import { readdir, stat } from 'fs/promises'
 import { join } from 'path'
 import { getEnvironmentConfig } from '../../../lib/environment'
 import { S3Client, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { DynamoDBClient, DescribeTableCommand } from '@aws-sdk/client-dynamodb'
-import Redis from 'ioredis'
 
 export async function GET() {
   try {
@@ -25,21 +24,19 @@ export async function GET() {
       },
       services: {
         s3: { status: 'unknown', error: null },
-        dynamodb: { status: 'unknown', error: null },
-        redis: { status: 'unknown', error: null }
+        dynamodb: { status: 'unknown', error: null }
       }
     }
 
     // Check AWS services - use Promise.allSettled to not fail if one service is down
     const serviceChecks = await Promise.allSettled([
       checkS3Health(config, health),
-      checkDynamoDBHealth(config, health),
-      checkRedisHealth(config, health)
+      checkDynamoDBHealth(config, health)
     ])
     
     // Log any service check failures for debugging
     serviceChecks.forEach((result, index) => {
-      const serviceName = ['S3', 'DynamoDB', 'Redis'][index]
+      const serviceName = ['S3', 'DynamoDB'][index]
       if (result.status === 'rejected') {
         console.error(`${serviceName} health check failed:`, result.reason)
       }
@@ -120,14 +117,12 @@ export async function GET() {
     const serviceStatuses = Object.values(health.services).map(s => s.status)
     
     // Only fail if critical services (S3, DynamoDB) are down
-    // Redis being down shouldn't fail the health check during startup
     const criticalServicesDown = health.services.s3?.status === 'unhealthy' || 
                                 health.services.dynamodb?.status === 'unhealthy'
     
     if (criticalServicesDown) {
       health.status = 'unhealthy'
-    } else if (serviceStatuses.includes('warning') || !health.ffmpegAvailable || 
-               health.services.redis?.status === 'unhealthy') {
+    } else if (serviceStatuses.includes('warning') || !health.ffmpegAvailable) {
       health.status = 'warning'
     }
 
@@ -193,52 +188,3 @@ async function checkDynamoDBHealth(config: any, health: any) {
   }
 }
 
-async function checkRedisHealth(config: any, health: any) {
-  let redis: Redis | null = null
-
-  try {
-    // Skip Redis check if endpoint is not configured
-    if (!config.redis.host || config.redis.host === 'localhost') {
-      health.services.redis = {
-        status: 'warning',
-        error: 'Redis endpoint not configured (using localhost default)'
-      }
-      return
-    }
-
-    redis = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      tls: config.redis.tls ? {} : undefined,
-      connectTimeout: 3000, // Shorter timeout for faster failure
-      lazyConnect: true,
-      maxRetriesPerRequest: 1
-    })
-
-    await redis.connect()
-    await redis.ping()
-
-    health.services.redis = {
-      status: 'healthy',
-      host: config.redis.host,
-      port: config.redis.port,
-      tls: config.redis.tls
-    }
-  } catch (error: any) {
-    console.error('Redis health check failed:', error.message)
-    health.services.redis = {
-      status: 'unhealthy',
-      error: error.message,
-      host: config.redis.host,
-      port: config.redis.port
-    }
-  } finally {
-    if (redis) {
-      try {
-        redis.disconnect()
-      } catch (disconnectError) {
-        // Ignore disconnect errors
-      }
-    }
-  }
-}
