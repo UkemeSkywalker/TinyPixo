@@ -5,6 +5,7 @@ import AudioUpload from "../../components/audio/AudioUpload";
 import AudioControls from "../../components/audio/AudioControls";
 import AudioPreview from "../../components/audio/AudioPreview";
 
+
 interface UploadedFile {
   fileId: string;
   fileName: string;
@@ -38,6 +39,7 @@ export default function AudioConverter() {
     "idle" | "uploading" | "converting" | "completed" | "error"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+
 
   const handleAudioUpload = async (file: File) => {
     setOriginalFile(file);
@@ -290,6 +292,7 @@ export default function AudioConverter() {
               console.log("[Progress] Conversion completed");
               setPhase("completed");
               await downloadConvertedFile(jobId);
+
               resolve();
               return;
             }
@@ -463,6 +466,7 @@ export default function AudioConverter() {
     setEstimatedTimeRemaining(null);
     setPhase("idle");
     setError(null);
+
   };
 
   return (
@@ -550,8 +554,12 @@ export default function AudioConverter() {
             convertedSize={convertedSize}
             onDownload={handleDownload}
           />
+
+
         </>
       )}
+
+
     </main>
   );
 }

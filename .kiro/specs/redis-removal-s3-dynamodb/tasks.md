@@ -3,6 +3,7 @@
 **Important Note:** All tasks will be tested against **live AWS services** (real DynamoDB and S3), not LocalStack. Each task includes validation against actual AWS resources to ensure production readiness.
 
 - [x] 1. Create DynamoDB-only progress service foundation
+
   - Implement new ProgressService class that uses only DynamoDB for storage
   - Create DynamoDB table schemas for progress tracking and upload sessions
   - Add TTL configuration for automatic cleanup
@@ -15,6 +16,7 @@
   - _Requirements: 1.1, 1.2, 2.1, 4.3, 6.1, 6.2, 9.1_
 
 - [x] 2. Implement DynamoDB-based upload progress tracking
+
   - Create UploadProgressService for chunked upload tracking in DynamoDB
   - Replace Redis-based upload progress storage with DynamoDB operations
   - Update upload-progress API route to query DynamoDB instead of Redis
@@ -32,6 +34,7 @@
   - _Requirements: 1.1, 1.3, 5.1, 5.2, 5.3, 9.2_
 
 - [x] 3. Replace Redis progress tracking in audio conversion workflow
+
   - Update FFmpeg progress parsing to write directly to DynamoDB
   - Modify conversion process to use DynamoDB-only progress service
   - Implement progress throttling to optimize DynamoDB write costs
@@ -48,7 +51,8 @@
     - **Error states properly displayed in frontend when conversion fails**
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 9.3_
 
-- [ ] 4. Implement download service for converted audio files
+- [x] 4. Implement download service for converted audio files
+
   - Create download API endpoint that retrieves converted files from S3
   - Update UI to display converted files with download buttons in the "Converted" section
   - Implement file listing functionality to show completed conversions
@@ -67,6 +71,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 5.1, 9.2_
 
 - [ ] 5. Remove all Redis dependencies from AWS services initialization
+
   - Update aws-services.ts to remove Redis client initialization
   - Remove Redis configuration from environment.ts
   - Update service initialization to skip Redis setup entirely
@@ -84,6 +89,7 @@
   - _Requirements: 4.1, 4.2, 7.1, 7.2, 7.3, 9.1_
 
 - [ ] 6. Update API routes to use DynamoDB-only progress service
+
   - Modify /api/progress route to query DynamoDB directly
   - Update /api/upload-progress route to use new DynamoDB-based tracking
   - Remove Redis fallback logic from all API endpoints
@@ -101,6 +107,7 @@
   - _Requirements: 1.2, 2.5, 4.3, 9.1, 9.2_
 
 - [ ] 7. Implement DynamoDB-based cleanup system
+
   - Create cleanup service that scans DynamoDB for expired records
   - Implement S3 file cleanup for expired jobs
   - Add cleanup scheduling and error handling
@@ -118,6 +125,7 @@
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 9.4_
 
 - [ ] 8. Update environment configuration and deployment files
+
   - Remove Redis environment variables from apprunner.yaml
   - Update Docker configurations to remove Redis dependencies
   - Modify environment detection to skip Redis configuration
@@ -130,6 +138,7 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 9.5_
 
 - [ ] 9. Remove Redis dependencies from package.json and imports
+
   - Remove redis package from dependencies
   - Clean up all Redis-related imports across the codebase
   - Remove Redis-related types and interfaces
@@ -142,6 +151,7 @@
   - _Requirements: 4.1, 4.4, 7.1, 9.1_
 
 - [ ] 10. Update and fix all test files for DynamoDB-only architecture
+
   - Replace Redis mocks with DynamoDB mocks in all test files
   - Update progress service tests to test DynamoDB operations
   - Fix API route tests to use DynamoDB-based progress tracking
@@ -154,6 +164,7 @@
   - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 9.1_
 
 - [ ] 11. Optimize DynamoDB performance and implement caching
+
   - Add in-memory caching layer for frequently accessed progress data
   - Implement batch operations for multiple progress updates
   - Add query optimization and projection expressions
@@ -166,6 +177,7 @@
   - _Requirements: 2.5, 5.4, 9.1, 9.3_
 
 - [ ] 12. Add comprehensive error handling and retry logic
+
   - Implement exponential backoff for DynamoDB operations
   - Add graceful degradation when DynamoDB is temporarily unavailable
   - Create meaningful error messages for different failure scenarios

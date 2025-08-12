@@ -27,7 +27,7 @@ export interface UploadProgressData {
   uploadedSize: number
   totalChunks: number
   completedChunks: number
-  stage: 'uploading' | 'completed' | 'failed'
+  stage: 'initializing' | 'uploading' | 'completed' | 'failed'
   uploadId?: string               // S3 multipart upload ID
   s3Key?: string                  // S3 object key
   bucketName?: string             // S3 bucket name
