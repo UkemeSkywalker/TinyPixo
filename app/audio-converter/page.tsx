@@ -291,7 +291,17 @@ export default function AudioConverter() {
             if (data.progress >= 100 && data.stage === "completed") {
               console.log("[Progress] Conversion completed");
               setPhase("completed");
-              await downloadConvertedFile(jobId);
+              
+              try {
+                await downloadConvertedFile(jobId);
+                console.log("[Progress] Download completed successfully");
+              } catch (downloadError) {
+                console.error("[Progress] Download failed:", downloadError);
+                setError(`Download failed: ${downloadError.message}`);
+                setPhase("error");
+                reject(downloadError);
+                return;
+              }
 
               resolve();
               return;
@@ -347,9 +357,46 @@ export default function AudioConverter() {
     });
   };
 
+  const downloadWithPresignedUrl = async (jobId: string): Promise<void> => {
+    console.log("[Download] Requesting presigned URL for jobId:", jobId);
+    
+    const presignedResponse = await fetch(`/api/download?jobId=${jobId}&presigned=true`);
+    if (!presignedResponse.ok) {
+      throw new Error(`Failed to get presigned URL: ${presignedResponse.status}`);
+    }
+    
+    const { presignedUrl, size } = await presignedResponse.json();
+    console.log("[Download] Got presigned URL, downloading directly from S3");
+    
+    const fileResponse = await fetch(presignedUrl);
+    if (!fileResponse.ok) {
+      throw new Error(`Failed to download from presigned URL: ${fileResponse.status}`);
+    }
+    
+    const blob = await fileResponse.blob();
+    console.log("[Download] Downloaded via presigned URL, size:", blob.size);
+    
+    const url = URL.createObjectURL(blob);
+    setConvertedUrl(url);
+    setConvertedSize(blob.size);
+    
+    console.log("[Download] Presigned URL download completed successfully");
+  };
+
   const downloadConvertedFile = async (jobId: string): Promise<void> => {
     const maxRetries = 8;
     const baseRetryDelay = 500; // Start with 500ms
+
+    // For large files, try presigned URL first
+    if (originalSize > 50 * 1024 * 1024) { // 50MB threshold
+      console.log("[Download] Large file detected, trying presigned URL first");
+      try {
+        await downloadWithPresignedUrl(jobId);
+        return;
+      } catch (presignedError) {
+        console.log("[Download] Presigned URL failed, falling back to streaming:", presignedError.message);
+      }
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -357,23 +404,51 @@ export default function AudioConverter() {
           `[Download] Starting download for jobId: ${jobId} (attempt ${attempt}/${maxRetries})`
         );
 
-        const downloadResponse = await fetch(`/api/download?jobId=${jobId}`);
+        // Add timeout to the fetch request for large files
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          console.log("[Download] Request timeout, aborting...");
+          controller.abort();
+        }, 60000); // 60 second timeout for large files
 
-        if (downloadResponse.ok) {
-          const blob = await downloadResponse.blob();
-          console.log("[Download] Downloaded file size:", blob.size);
+        let downloadResponse;
+        try {
+          downloadResponse = await fetch(`/api/download?jobId=${jobId}`, {
+            signal: controller.signal
+          });
 
-          const url = URL.createObjectURL(blob);
-          setConvertedUrl(url);
-          setConvertedSize(blob.size);
+          clearTimeout(timeoutId);
 
-          console.log("[Download] Converted audio ready for download");
-          return; // Success, exit the retry loop
+          if (downloadResponse.ok) {
+            console.log("[Download] Response received, downloading blob...");
+            const blob = await downloadResponse.blob();
+            console.log("[Download] Downloaded file size:", blob.size);
+
+            if (blob.size === 0) {
+              throw new Error("Downloaded file is empty");
+            }
+
+            const url = URL.createObjectURL(blob);
+            setConvertedUrl(url);
+            setConvertedSize(blob.size);
+
+            console.log("[Download] Converted audio ready for download");
+            return; // Success, exit the retry loop
+          }
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error("Download timeout - file may be too large");
+          }
+          throw fetchError;
         }
 
+        console.log(`[Download] Response not ok: ${downloadResponse.status} ${downloadResponse.statusText}`);
         const errorData = await downloadResponse
           .json()
           .catch(() => ({ error: "Download failed" }));
+        
+        console.log("[Download] Error data:", errorData);
 
         // Calculate retry delay for this attempt
         const retryDelay =

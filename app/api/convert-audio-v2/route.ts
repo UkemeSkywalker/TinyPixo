@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 })
     }
 
-    // Get real-time progress from Redis
+    // Get real-time progress from DynamoDB
     const { progressService } = await import('../../../lib/progress-service')
     const progress = await progressService.getProgress(jobId)
 

@@ -1,6 +1,6 @@
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3'
 import { DynamoDBClient, CreateTableCommand, DescribeTableCommand, UpdateTimeToLiveCommand } from '@aws-sdk/client-dynamodb'
-import { getEnvironmentConfig, Environment } from './environment'
+import { getEnvironmentConfig } from './environment'
 import { dynamodbProgressService } from './progress-service-dynamodb'
 
 const config = getEnvironmentConfig()
