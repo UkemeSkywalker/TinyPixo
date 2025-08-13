@@ -22,14 +22,18 @@ interface AudioControlsProps {
   uploadProgress: number
   conversionProgress: number
   estimatedTimeRemaining?: number | null
-  phase: 'idle' | 'uploading' | 'converting' | 'completed' | 'error'
+  phase: 'idle' | 'uploading' | 'converting' | 's3uploading' | 'completed' | 'error'
   uploadedFile: UploadedFile | null
   conversionJob: ConversionJob | null
   error: string | null
+  currentStage?: string
 }
 
 // Helper function to format seconds into minutes and seconds
 function formatTime(seconds: number): string {
+  if (seconds < 0) {
+    return "calculating..."
+  }
   if (seconds < 60) {
     return `${seconds} sec`
   }
@@ -52,9 +56,10 @@ export default function AudioControls({
   phase,
   uploadedFile,
   conversionJob,
-  error
+  error,
+  currentStage
 }: AudioControlsProps) {
-  const isProcessing = isUploading || isConverting
+  const isProcessing = isUploading || isConverting || phase === 's3uploading'
   const canConvert = uploadedFile && !isProcessing
   const currentProgress = phase === 'uploading' ? uploadProgress : conversionProgress
 
@@ -156,12 +161,27 @@ export default function AudioControls({
             <p className="text-sm text-gray-400 mt-2">
               {getProgressText()} {currentProgress}% complete
               {phase === 'converting' && estimatedTimeRemaining !== null && currentProgress > 0 && currentProgress < 100 && (
-                <span> • Estimated time remaining: {formatTime(estimatedTimeRemaining)}</span>
+                <span>
+                  {estimatedTimeRemaining === -1 
+                    ? " • Processing large file, time remaining unknown" 
+                    : ` • Estimated time remaining: ${formatTime(estimatedTimeRemaining)}`
+                  }
+                </span>
               )}
             </p>
-            {phase === 'converting' && currentProgress < 100 && (
+            {(phase === 'converting' || phase === 's3uploading') && currentProgress < 100 && (
               <p className="text-xs text-purple-300 mt-1 animate-pulse">
-                Please be patient, conversion in progress...
+                {phase === 's3uploading' 
+                  ? "Uploading converted file to cloud storage..." 
+                  : currentStage === 'finalizing conversion' 
+                    ? "Finalizing conversion, writing output file..." 
+                    : "Please be patient, conversion in progress..."
+                }
+              </p>
+            )}
+            {currentStage && (
+              <p className="text-xs text-gray-500 mt-1">
+                {currentStage}
               </p>
             )}
           </div>
@@ -173,6 +193,7 @@ export default function AudioControls({
   function getButtonText(): string {
     if (isUploading) return 'Uploading...'
     if (isConverting) return 'Converting...'
+    if (phase === 's3uploading') return 'Uploading to Cloud...'
     if (!uploadedFile) return 'Upload file first'
     if (phase === 'completed') return 'Convert Another'
     return 'Convert Audio'
@@ -180,8 +201,9 @@ export default function AudioControls({
 
   function getProgressText(): string {
     switch (phase) {
-      case 'uploading': return 'Uploading...'
-      case 'converting': return 'Converting...'
+      case 'uploading': return 'Phase 1: Uploading file...'
+      case 'converting': return 'Phase 2: Converting audio...'
+      case 's3uploading': return 'Phase 3: Uploading to cloud storage...'
       default: return 'Processing...'
     }
   }

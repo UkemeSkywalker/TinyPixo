@@ -1,31 +1,31 @@
-'use client'
+"use client";
 
 interface VideoControlsProps {
-  format: string
-  quality: string
-  resolution: string
-  bitrate: string
-  fps: string
-  onFormatChange: (format: string) => void
-  onQualityChange: (quality: string) => void
-  onResolutionChange: (resolution: string) => void
-  onBitrateChange: (bitrate: string) => void
-  onFpsChange: (fps: string) => void
-  onConvert: () => void
-  isConverting: boolean
-  progress: number
-  estimatedTimeRemaining?: number | null
-  phase?: 'uploading' | 'converting'
+  format: string;
+  quality: string;
+  resolution: string;
+  bitrate: string;
+  fps: string;
+  onFormatChange: (format: string) => void;
+  onQualityChange: (quality: string) => void;
+  onResolutionChange: (resolution: string) => void;
+  onBitrateChange: (bitrate: string) => void;
+  onFpsChange: (fps: string) => void;
+  onConvert: () => void;
+  isConverting: boolean;
+  progress: number;
+  estimatedTimeRemaining?: number | null;
+  phase?: "uploading" | "converting";
 }
 
 // Helper function to format seconds into minutes and seconds
 function formatTime(seconds: number): string {
   if (seconds < 60) {
-    return `${seconds} sec`
+    return `${seconds} sec`;
   }
-  const minutes = Math.floor(seconds / 60)
-  const remainingSeconds = seconds % 60
-  return `${minutes} min ${remainingSeconds} sec`
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes} min ${remainingSeconds} sec`;
 }
 
 export default function VideoControls({
@@ -43,12 +43,14 @@ export default function VideoControls({
   isConverting,
   progress,
   estimatedTimeRemaining = null,
-  phase = 'converting'
+  phase = "converting",
 }: VideoControlsProps) {
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
-      <h2 className="text-xl font-semibold text-white mb-4">Conversion Settings</h2>
-      
+      <h2 className="text-xl font-semibold text-white mb-4">
+        Conversion Settings
+      </h2>
+
       <div className="grid md:grid-cols-3 gap-6 mb-6">
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -144,22 +146,29 @@ export default function VideoControls({
         disabled={isConverting}
         className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
       >
-        {isConverting ? (phase === 'uploading' ? `Uploading... ${progress}%` : `Converting... ${progress}%`) : 'Convert Video'}
+        {isConverting
+          ? phase === "uploading"
+            ? `Uploading... ${progress}%`
+            : `Converting... ${progress}%`
+          : "Convert Video"}
       </button>
-      
+
       {isConverting && (
         <div className="mt-4">
           <div className="flex justify-between text-sm text-gray-300 mb-2">
-            <span>{phase === 'uploading' ? 'Uploading' : 'Converting'}</span>
+            <span>{phase === "uploading" ? "Uploading" : "Converting"}</span>
             <span>
               {progress}%
-              {phase === 'converting' && estimatedTimeRemaining !== null && progress > 0 && progress < 100 && (
-                <> • {formatTime(estimatedTimeRemaining)} remaining</>
-              )}
+              {phase === "converting" &&
+                estimatedTimeRemaining !== null &&
+                progress > 0 &&
+                progress < 100 && (
+                  <> • {formatTime(estimatedTimeRemaining)} remaining</>
+                )}
             </span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-2">
-            <div 
+            <div
               className="bg-purple-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             ></div>
@@ -167,5 +176,5 @@ export default function VideoControls({
         </div>
       )}
     </div>
-  )
+  );
 }

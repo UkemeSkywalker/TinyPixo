@@ -7,6 +7,7 @@ export interface ProgressData {
   jobId: string
   progress: number // 0-100
   stage: string
+  phase: 'upload' | 'conversion' | 's3upload' | 'completed' // New 3-phase system
   estimatedTimeRemaining?: number
   error?: string
   startTime?: number
@@ -16,6 +17,8 @@ export interface ProgressData {
   totalSize?: number              // For upload progress
   completedChunks?: number        // For chunked uploads
   totalChunks?: number            // For chunked uploads
+  ffmpegLogs?: string[]           // Recent FFmpeg stderr lines
+  lastLogUpdate?: number          // Timestamp of last log update
   ttl: number                     // TTL timestamp for automatic cleanup
   updatedAt: number               // Last update timestamp
 }
@@ -217,6 +220,7 @@ export class DynamoDBProgressService {
       jobId,
       progress: 0,
       stage: 'initialized',
+      phase: 'upload',
       startTime: Date.now(),
       ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
       updatedAt: Date.now()
@@ -290,12 +294,15 @@ export class DynamoDBProgressService {
       jobId,
       progress: 100,
       stage: 'completed',
+      phase: 'completed',
       ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
       updatedAt: Date.now()
     }
 
-    console.log(`[DynamoDBProgressService] Marking job ${jobId} as complete`)
+    console.log(`[DynamoDBProgressService] 🎯 Marking job ${jobId} as COMPLETE`)
+    console.log(`[DynamoDBProgressService] 📊 Final progress: 100%, Stage: completed`)
     await this.setProgress(jobId, completeProgress)
+    console.log(`[DynamoDBProgressService] ✅ Job ${jobId} completion status saved to DynamoDB`)
   }
 
   /**
@@ -306,6 +313,7 @@ export class DynamoDBProgressService {
       jobId,
       progress: -1, // -1 indicates failure
       stage: 'failed',
+      phase: 'completed', // Failed is still a completion state
       error,
       ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
       updatedAt: Date.now()
@@ -313,6 +321,104 @@ export class DynamoDBProgressService {
 
     console.log(`[DynamoDBProgressService] Marking job ${jobId} as failed: ${error}`)
     await this.setProgress(jobId, failedProgress)
+  }
+
+  /**
+   * Transition job to conversion phase
+   */
+  async startConversionPhase(jobId: string): Promise<void> {
+    const conversionProgress: ProgressData = {
+      jobId,
+      progress: 0,
+      stage: 'starting conversion',
+      phase: 'conversion',
+      ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
+      updatedAt: Date.now()
+    }
+
+    console.log(`[DynamoDBProgressService] Starting conversion phase for job ${jobId}`)
+    await this.setProgress(jobId, conversionProgress)
+  }
+
+  /**
+   * Transition job to S3 upload phase
+   */
+  async startS3UploadPhase(jobId: string): Promise<void> {
+    const s3UploadProgress: ProgressData = {
+      jobId,
+      progress: 0,
+      stage: 'uploading converted file to cloud storage',
+      phase: 's3upload',
+      ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
+      updatedAt: Date.now()
+    }
+
+    console.log(`[DynamoDBProgressService] Starting S3 upload phase for job ${jobId}`)
+    await this.setProgress(jobId, s3UploadProgress)
+  }
+
+  /**
+   * Update S3 upload progress
+   */
+  async updateS3UploadProgress(
+    jobId: string, 
+    uploadedBytes: number, 
+    totalBytes: number
+  ): Promise<void> {
+    const progress = Math.min(Math.round((uploadedBytes / totalBytes) * 100), 100)
+    const uploadSpeed = this.calculateUploadSpeed(jobId, uploadedBytes)
+    
+    const s3UploadProgress: ProgressData = {
+      jobId,
+      progress,
+      stage: `uploading converted file (${this.formatBytes(uploadedBytes)} / ${this.formatBytes(totalBytes)})${uploadSpeed ? ` at ${uploadSpeed}` : ''}`,
+      phase: 's3upload',
+      uploadedSize: uploadedBytes,
+      totalSize: totalBytes,
+      ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
+      updatedAt: Date.now()
+    }
+
+    await this.setProgress(jobId, s3UploadProgress)
+  }
+
+  /**
+   * Calculate upload speed for display
+   */
+  private uploadSpeedTracking = new Map<string, { lastBytes: number, lastTime: number }>()
+  
+  private calculateUploadSpeed(jobId: string, currentBytes: number): string | null {
+    const now = Date.now()
+    const tracking = this.uploadSpeedTracking.get(jobId)
+    
+    if (!tracking) {
+      this.uploadSpeedTracking.set(jobId, { lastBytes: currentBytes, lastTime: now })
+      return null
+    }
+    
+    const timeDiff = (now - tracking.lastTime) / 1000 // seconds
+    const bytesDiff = currentBytes - tracking.lastBytes
+    
+    if (timeDiff < 1) return null // Don't calculate for very short intervals
+    
+    const bytesPerSecond = bytesDiff / timeDiff
+    tracking.lastBytes = currentBytes
+    tracking.lastTime = now
+    
+    return this.formatBytes(bytesPerSecond) + '/s'
+  }
+
+  /**
+   * Format bytes to human readable string
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B'
+    
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 
   /**
@@ -398,6 +504,7 @@ export class DynamoDBProgressService {
           jobId,
           progress: 5, // Small progress bump when duration is detected
           stage: 'analyzing audio duration',
+          phase: 'conversion',
           totalDuration: this.formatSecondsToTime(progressInfo.duration),
           ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
           updatedAt: Date.now()
@@ -429,6 +536,7 @@ export class DynamoDBProgressService {
         const dynamoProgressData: ProgressData = {
           ...progressData,
           jobId,
+          phase: 'conversion', // Ensure FFmpeg progress is in conversion phase
           ttl: Math.floor(Date.now() / 1000) + this.PROGRESS_TTL,
           updatedAt: Date.now()
         }
@@ -508,6 +616,68 @@ export class DynamoDBProgressService {
     const centiseconds = Math.floor((totalSeconds % 1) * 100)
 
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`
+  }
+
+  /**
+   * Add FFmpeg log line to progress data (with throttling to avoid excessive writes)
+   */
+  private logBuffer = new Map<string, { logs: string[], lastUpdate: number }>()
+  private readonly LOG_BUFFER_SIZE = 50 // Keep last 50 log lines
+  private readonly LOG_UPDATE_INTERVAL = 2000 // Update logs every 2 seconds
+
+  async addFFmpegLog(jobId: string, logLine: string): Promise<void> {
+    if (!logLine.trim()) return
+
+    // Initialize buffer for this job if needed
+    if (!this.logBuffer.has(jobId)) {
+      this.logBuffer.set(jobId, { logs: [], lastUpdate: 0 })
+    }
+
+    const buffer = this.logBuffer.get(jobId)!
+    
+    // Add log line to buffer
+    buffer.logs.push(`${new Date().toISOString()}: ${logLine}`)
+    
+    // Keep only the last N log lines
+    if (buffer.logs.length > this.LOG_BUFFER_SIZE) {
+      buffer.logs = buffer.logs.slice(-this.LOG_BUFFER_SIZE)
+    }
+
+    // Throttle database updates
+    const now = Date.now()
+    if (now - buffer.lastUpdate >= this.LOG_UPDATE_INTERVAL) {
+      try {
+        // Get current progress data
+        const currentProgress = await this.getProgress(jobId)
+        if (currentProgress) {
+          // Update with logs
+          const updatedProgress: ProgressData = {
+            ...currentProgress,
+            ffmpegLogs: [...buffer.logs], // Copy the logs
+            lastLogUpdate: now,
+            updatedAt: now
+          }
+          
+          await this.setProgress(jobId, updatedProgress)
+          buffer.lastUpdate = now
+        }
+      } catch (error) {
+        console.error(`[DynamoDBProgressService] Failed to update logs for job ${jobId}:`, error)
+      }
+    }
+  }
+
+  /**
+   * Get FFmpeg logs for a job
+   */
+  async getFFmpegLogs(jobId: string): Promise<string[]> {
+    try {
+      const progressData = await this.getProgress(jobId)
+      return progressData?.ffmpegLogs || []
+    } catch (error) {
+      console.error(`[DynamoDBProgressService] Failed to get logs for job ${jobId}:`, error)
+      return []
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jobService, JobStatus, S3Location } from '../../../lib/job-service'
 import { progressService } from '../../../lib/progress-service'
-import { streamingConversionService } from '../../../lib/streaming-conversion-service'
+import { streamingConversionServiceFixed as streamingConversionService } from '../../../lib/streaming-conversion-service-fixed'
 import { s3Client } from '../../../lib/aws-services'
 import { HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 
@@ -289,14 +289,32 @@ async function startConversionProcess(job: any, requestData: ConversionRequest):
     await progressService.setProgress(jobId, {
       jobId,
       progress: 10,
-      stage: 'starting conversion process'
+      stage: 'starting conversion process',
+      phase: 'conversion'
     })
+
+    // Calculate timeout based on file size (more time for larger files)
+    const fileSizeMB = job.inputS3Location.size / (1024 * 1024)
+    let timeoutMs = 300000 // Base 5 minutes
+    
+    if (fileSizeMB > 50) {
+      // For files > 50MB: 10 minutes base + 2 minutes per additional 50MB
+      timeoutMs = 600000 + Math.ceil((fileSizeMB - 50) / 50) * 120000
+    } else if (fileSizeMB > 10) {
+      // For files > 10MB: 7 minutes
+      timeoutMs = 420000
+    }
+    
+    // Cap at 60 minutes for very large files
+    timeoutMs = Math.min(timeoutMs, 3600000)
+    
+    console.log(`[ConversionAPI] File size: ${fileSizeMB.toFixed(1)}MB, timeout: ${(timeoutMs/60000).toFixed(1)} minutes`)
 
     // Perform the actual conversion using streaming service
     const conversionResult = await streamingConversionService.convertAudio(job, {
       format: requestData.format,
       quality: requestData.quality,
-      timeout: 300000 // 5 minutes
+      timeout: timeoutMs
     })
 
     if (conversionResult.success && conversionResult.outputS3Location) {

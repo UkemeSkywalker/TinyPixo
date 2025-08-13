@@ -25,8 +25,20 @@ export async function GET(request: NextRequest) {
     const responseTime = Date.now() - startTime
     console.log(`[Progress API] Returning progress for jobId ${jobId}: ${progressData.progress}% (${progressData.stage}) - Response time: ${responseTime}ms`)
     
+    // Optionally include recent logs if requested
+    const includeLogs = request.nextUrl.searchParams.get('includeLogs') === 'true'
+    let responseData = progressData
+    
+    if (includeLogs && progressData.ffmpegLogs) {
+      // Include only the last 10 log lines in progress response to keep it lightweight
+      responseData = {
+        ...progressData,
+        ffmpegLogs: progressData.ffmpegLogs.slice(-10)
+      }
+    }
+    
     // Add proper cache headers to prevent caching of progress responses
-    return NextResponse.json(progressData, {
+    return NextResponse.json(responseData, {
       headers: {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
