@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
     const presigned = searchParams.get('presigned') === 'true'
+    const preview = searchParams.get('preview') === 'true'
+    const customFilename = searchParams.get('filename')
 
     console.log(`[Download] Request started - jobId: ${jobId}, presigned: ${presigned}`)
 
@@ -38,19 +40,22 @@ export async function GET(request: NextRequest) {
 
     // Generate presigned URL if requested
     if (presigned) {
-      const presignedUrl = await generatePresignedUrl(job.outputS3Location!.bucket, job.outputS3Location!.key)
-      console.log(`[Download] Generated presigned URL for job ${jobId}`)
+      const forceDownload = !preview // Don't force download for preview
+      const filename = customFilename || generateFilename(jobId, job.format)
+      const presignedUrl = await generatePresignedUrl(job.outputS3Location!.bucket, job.outputS3Location!.key, forceDownload, filename)
+      console.log(`[Download] Generated presigned URL for job ${jobId} (${preview ? 'preview' : 'download'}) with filename: ${filename}`)
 
       return NextResponse.json({
         presignedUrl,
-        filename: generateFilename(jobId, job.format),
+        filename: filename,
         contentType: getContentType(job.format),
         size: job.outputS3Location!.size
       })
     }
 
     // Stream file directly from S3
-    return await streamFileFromS3(job.outputS3Location!.bucket, job.outputS3Location!.key, jobId, job.format, startTime)
+    const filename = customFilename || generateFilename(jobId, job.format)
+    return await streamFileFromS3(job.outputS3Location!.bucket, job.outputS3Location!.key, jobId, job.format, startTime, filename)
 
   } catch (error) {
     const duration = Date.now() - startTime
@@ -162,7 +167,7 @@ async function validateDownloadAccess(jobId: string): Promise<{
 /**
  * Stream file directly from S3 without loading into memory
  */
-async function streamFileFromS3(bucket: string, key: string, jobId: string, format: string, startTime: number): Promise<NextResponse> {
+async function streamFileFromS3(bucket: string, key: string, jobId: string, format: string, startTime: number, customFilename?: string): Promise<NextResponse> {
   try {
     console.log(`[Download] Starting S3 stream for ${bucket}/${key}`)
 
@@ -189,49 +194,157 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
     }
 
     // Convert AWS SDK stream to web stream
+    let streamRef: any = null
     const webStream = new ReadableStream({
       start(controller) {
         // Handle different stream types from AWS SDK
         const stream = response.Body as any
+        streamRef = stream
 
         if (stream.getReader) {
           // If it's already a ReadableStream
           const reader = stream.getReader()
+          let controllerClosed = false
 
-          function pump(): Promise<void> {
-            return reader.read().then(({ done, value }) => {
-              if (done) {
+          const closeController = () => {
+            if (!controllerClosed) {
+              controllerClosed = true
+              try {
                 controller.close()
-                return
+              } catch (error) {
+                console.error('[Download] Controller close error:', error)
               }
-              controller.enqueue(value)
-              return pump()
-            }).catch(error => {
+            }
+          }
+
+          const errorController = (error: any) => {
+            if (!controllerClosed) {
+              controllerClosed = true
+              try {
+                controller.error(error)
+              } catch (controllerError) {
+                console.error('[Download] Controller error handling failed:', controllerError)
+              }
+            }
+          }
+
+          async function pump(): Promise<void> {
+            try {
+              while (!controllerClosed) {
+                const { done, value } = await reader.read()
+
+                if (controllerClosed) {
+                  break
+                }
+
+                if (done) {
+                  closeController()
+                  break
+                }
+
+                try {
+                  controller.enqueue(value)
+                } catch (error) {
+                  console.error('[Download] Controller enqueue error:', error)
+                  errorController(error)
+                  break
+                }
+              }
+            } catch (error) {
               console.error('[Download] Stream error:', error)
-              controller.error(error)
-            })
+              errorController(error)
+            } finally {
+              try {
+                reader.releaseLock()
+              } catch (error) {
+                console.error('[Download] Reader release error:', error)
+              }
+            }
           }
 
           return pump()
         } else {
           // Handle Node.js Readable stream
+          let controllerClosed = false
+
+          const closeController = () => {
+            if (!controllerClosed) {
+              controllerClosed = true
+              try {
+                controller.close()
+              } catch (error) {
+                console.error('[Download] Controller close error:', error)
+              }
+            }
+          }
+
+          const errorController = (error: any) => {
+            if (!controllerClosed) {
+              controllerClosed = true
+              try {
+                controller.error(error)
+              } catch (controllerError) {
+                console.error('[Download] Controller error handling failed:', controllerError)
+              }
+            }
+          }
+
           stream.on('data', (chunk: any) => {
-            controller.enqueue(new Uint8Array(chunk))
+            if (controllerClosed) {
+              return
+            }
+
+            try {
+              controller.enqueue(new Uint8Array(chunk))
+            } catch (error) {
+              console.error('[Download] Controller enqueue error:', error)
+              errorController(error)
+              // Destroy the stream to prevent further data events
+              if (stream.destroy) {
+                stream.destroy()
+              }
+            }
           })
 
           stream.on('end', () => {
-            controller.close()
+            closeController()
           })
 
           stream.on('error', (error: any) => {
             console.error('[Download] Stream error:', error)
-            controller.error(error)
+            errorController(error)
           })
+
+          // Handle client disconnect
+          stream.on('close', () => {
+            if (!controllerClosed) {
+              console.log('[Download] Stream closed by client')
+              controllerClosed = true
+            }
+          })
+
+          // Handle abrupt termination
+          stream.on('aborted', () => {
+            if (!controllerClosed) {
+              console.log('[Download] Stream aborted')
+              controllerClosed = true
+            }
+          })
+        }
+      },
+      cancel(reason) {
+        console.log('[Download] Stream cancelled by client:', reason)
+        // Clean up the underlying stream
+        if (streamRef && typeof streamRef.destroy === 'function') {
+          streamRef.destroy()
+        }
+        if (streamRef && typeof streamRef.abort === 'function') {
+          streamRef.abort()
         }
       }
     })
 
-    const filename = generateFilename(jobId, format)
+    const filename = customFilename || generateFilename(jobId, format)
     const contentType = getContentType(format)
 
     const duration = Date.now() - startTime
@@ -264,12 +377,20 @@ async function streamFileFromS3(bucket: string, key: string, jobId: string, form
 /**
  * Generate presigned URL for direct S3 download
  */
-async function generatePresignedUrl(bucket: string, key: string): Promise<string> {
+async function generatePresignedUrl(bucket: string, key: string, forceDownload: boolean = true, customFilename?: string): Promise<string> {
   try {
-    const command = new GetObjectCommand({
+    const commandParams: any = {
       Bucket: bucket,
       Key: key
-    })
+    }
+
+    // Add Content-Disposition header to force download
+    if (forceDownload) {
+      const filename = customFilename || key.split('/').pop() || 'download'
+      commandParams.ResponseContentDisposition = `attachment; filename="${filename}"`
+    }
+
+    const command = new GetObjectCommand(commandParams)
 
     // Generate presigned URL valid for 1 hour
     const presignedUrl = await getSignedUrl(s3Client, command, {

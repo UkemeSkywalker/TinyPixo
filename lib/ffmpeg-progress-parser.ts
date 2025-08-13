@@ -103,7 +103,11 @@ export class FFmpegProgressParser {
     if (durationMatch) {
       const duration = this.parseTimeToSeconds(durationMatch[1], durationMatch[2], durationMatch[3], durationMatch[4])
       progressInfo.duration = duration
-      console.log(`[FFmpegProgressParser] Extracted duration: ${duration} seconds (${durationMatch[0]})`)
+      
+      // IMPORTANT: Store the real duration in processInfo so it persists across calls
+      processInfo.estimatedDuration = duration
+      
+      console.log(`[FFmpegProgressParser] Extracted REAL duration: ${duration} seconds (${durationMatch[0]}) - updating processInfo`)
       return progressInfo
     }
 
@@ -159,23 +163,72 @@ export class FFmpegProgressParser {
     let stage = 'processing'
     let estimatedTimeRemaining: number | undefined
 
-    // Use stored duration from processInfo if not in current progressInfo
+    // Prioritize real duration from FFmpeg output, fallback to estimated
     const duration = progressInfo.duration || processInfo.estimatedDuration
     const currentTime = progressInfo.currentTime
 
     // Primary method: Use duration-based calculation
     if (duration && currentTime !== undefined) {
-      progress = Math.min((currentTime / duration) * 100, 100)
+      if (currentTime > duration) {
+        // If current time exceeds estimated duration, this means the initial duration estimate was wrong
+        // This commonly happens with large files or files with variable bitrates
+        // We need to dynamically adjust our understanding of the total duration
+        
+        const overage = currentTime - duration
+        const overageRatio = overage / duration
+        
+        // For significant overages (>10%), assume the file is much longer than estimated
+        if (overageRatio > 0.1) {
+          // Use a more aggressive adjustment - assume the file could be up to 2x longer
+          const adjustedDuration = Math.max(currentTime * 1.1, duration * 1.5)
+          progress = Math.min((currentTime / adjustedDuration) * 100, 95) // Cap at 95% for dynamic estimation
+          stage = 'processing (duration longer than estimated)'
+          
+          console.log(`[FFmpegProgressParser] Large duration overage detected (${overageRatio.toFixed(1)}x), using dynamic estimation`)
+          console.log(`[FFmpegProgressParser] Adjusted progress: ${progress.toFixed(1)}% (${currentTime}s / ~${adjustedDuration.toFixed(1)}s estimated)`)
+        } else {
+          // Small overage, use conservative adjustment
+          const adjustedDuration = duration + (overage * 0.8)
+          progress = Math.min((currentTime / adjustedDuration) * 100, 98)
+          
+          console.log(`[FFmpegProgressParser] Small duration overage, adjusting: ${progress.toFixed(1)}% (${currentTime}/${duration}s, adjusted: ${adjustedDuration.toFixed(1)}s)`)
+        }
+      } else {
+        // Normal case: current time is within estimated duration
+        const rawProgress = (currentTime / duration) * 100
+        
+        if (rawProgress >= 99.5) {
+          // Very close to completion - show finalization stage
+          progress = 99
+          stage = 'finalizing conversion'
+          console.log(`[FFmpegProgressParser] 🔄 FINALIZATION PHASE: ${currentTime}s / ${duration}s (${rawProgress.toFixed(1)}%)`)
+        } else {
+          // Normal progress
+          progress = Math.min(rawProgress, 98) // Cap at 98% until very close to end
+        }
+        
+        const durationType = progressInfo.duration ? "REAL" : "ESTIMATED"
+        console.log(`[FFmpegProgressParser] Duration-based progress: ${progress.toFixed(1)}% (${currentTime}/${duration}s) [${durationType}]`)
+      }
       
       // Estimate remaining time based on processing speed
       if (currentTime > 0) {
         const elapsedTime = (Date.now() - processInfo.startTime) / 1000
         const processingRate = currentTime / elapsedTime
-        const remainingTime = duration - currentTime
-        estimatedTimeRemaining = Math.ceil(remainingTime / processingRate)
+        
+        // Check if processing is taking much longer than expected
+        if (elapsedTime > duration * 2) {
+          console.log(`[FFmpegProgressParser] ⚠️  Long processing detected: ${elapsedTime.toFixed(0)}s elapsed for ${duration}s file`)
+          stage = 'processing large file (taking longer than expected)'
+        }
+        
+        const remainingTime = Math.max(duration - currentTime, 0)
+        if (remainingTime > 0 && currentTime <= duration) {
+          estimatedTimeRemaining = Math.ceil(remainingTime / processingRate)
+        } else {
+          estimatedTimeRemaining = -1 // Indicate unknown remaining time for overages
+        }
       }
-
-      console.log(`[FFmpegProgressParser] Duration-based progress: ${progress.toFixed(1)}% (${currentTime}/${duration}s)`)
     }
     // Fallback 1: Use file size estimation for streaming
     else if (processInfo.isStreaming && fallbackFileSize && currentTime) {

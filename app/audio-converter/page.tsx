@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import AudioUpload from "../../components/audio/AudioUpload";
 import AudioControls from "../../components/audio/AudioControls";
 import AudioPreview from "../../components/audio/AudioPreview";
-
+import FFmpegLogsViewer from "../../components/audio/FFmpegLogsViewer";
 
 interface UploadedFile {
   fileId: string;
@@ -15,6 +15,12 @@ interface UploadedFile {
 interface ConversionJob {
   jobId: string;
   status: string;
+  format?: string;
+  outputS3Location?: {
+    bucket: string;
+    key: string;
+    size: number;
+  };
 }
 
 export default function AudioConverter() {
@@ -36,10 +42,12 @@ export default function AudioConverter() {
     number | null
   >(null);
   const [phase, setPhase] = useState<
-    "idle" | "uploading" | "converting" | "completed" | "error"
+    "idle" | "uploading" | "converting" | "s3uploading" | "completed" | "error"
   >("idle");
   const [error, setError] = useState<string | null>(null);
-
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [currentStage, setCurrentStage] = useState<string>("");
+  const [showFFmpegLogs, setShowFFmpegLogs] = useState<boolean>(false);
 
   const handleAudioUpload = async (file: File) => {
     setOriginalFile(file);
@@ -62,11 +70,14 @@ export default function AudioConverter() {
 
     // Generate a unique fileId for progress tracking (browser-compatible)
     const generateUUID = () => {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+        /[xy]/g,
+        function (c) {
+          const r = (Math.random() * 16) | 0;
+          const v = c == "x" ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        }
+      );
     };
     const fileId = `${Date.now()}-${generateUUID()}`;
     let progressInterval: NodeJS.Timeout | null = null;
@@ -237,6 +248,7 @@ export default function AudioConverter() {
       setConversionJob({
         jobId,
         status: conversionResult.status,
+        format: format,
       });
 
       // Start progress polling
@@ -282,29 +294,98 @@ export default function AudioConverter() {
             pollDelay = 500;
             pollAttempts = 0;
 
-            setConversionProgress(data.progress || 0);
+            // Handle 3-phase progress system
+            if (data.phase) {
+              switch (data.phase) {
+                case 'upload':
+                  setPhase('uploading');
+                  setUploadProgress(data.progress || 0);
+                  break;
+                case 'conversion':
+                  setPhase('converting');
+                  setConversionProgress(data.progress || 0);
+                  break;
+                case 's3upload':
+                  setPhase('s3uploading');
+                  setConversionProgress(data.progress || 0); // Reuse conversion progress for S3 upload
+                  break;
+                case 'completed':
+                  setPhase('completed');
+                  setConversionProgress(100);
+                  break;
+              }
+            } else {
+              // Fallback for old single-phase system
+              setConversionProgress(data.progress || 0);
+            }
+            
+            // Update current stage for better user feedback
+            if (data.stage) {
+              setCurrentStage(data.stage);
+            }
 
             if (data.estimatedTimeRemaining !== undefined) {
               setEstimatedTimeRemaining(data.estimatedTimeRemaining);
             }
 
-            if (data.progress >= 100 && data.stage === "completed") {
-              console.log("[Progress] Conversion completed");
+            if (data.progress >= 100 && (data.stage === "completed" || data.phase === "completed")) {
+              console.log(
+                "[Progress] Conversion completed - showing results immediately"
+              );
               setPhase("completed");
-              
-              try {
-                await downloadConvertedFile(jobId);
-                console.log("[Progress] Download completed successfully");
-              } catch (downloadError) {
-                console.error("[Progress] Download failed:", downloadError);
-                setError(`Download failed: ${downloadError.message}`);
-                setPhase("error");
-                reject(downloadError);
-                return;
+
+              // Get the converted file size from the progress data or fetch job details
+              if (data.outputSize) {
+                setConvertedSize(data.outputSize);
+              } else {
+                // Fetch job details to get the output size
+                fetchJobDetails(jobId);
               }
 
               resolve();
               return;
+            }
+
+            // Handle large files that exceed estimated duration
+            if (data.progress >= 99 && data.stage === "processing") {
+              // Check if this is a large file taking longer than expected
+              if (data.estimatedTimeRemaining === -1) {
+                console.log(
+                  "[Progress] Large file processing beyond estimated duration"
+                );
+                // Continue polling but don't get stuck - this is normal for large files
+              } else {
+                // If stuck at high progress for too long, check job status directly
+                const stuckTime = Date.now() - (data.updatedAt || Date.now());
+                if (stuckTime > 30000) {
+                  // If stuck for more than 30 seconds
+                  console.log(
+                    "[Progress] Progress stuck at high percentage, checking job status directly"
+                  );
+                  try {
+                    const jobResponse = await fetch(`/api/jobs/${jobId}`);
+                    if (jobResponse.ok) {
+                      const jobData = await jobResponse.json();
+                      if (jobData.status === "completed") {
+                        console.log(
+                          "[Progress] Job is actually completed, showing results"
+                        );
+                        setPhase("completed");
+                        if (jobData.outputS3Location?.size) {
+                          setConvertedSize(jobData.outputS3Location.size);
+                        }
+                        resolve();
+                        return;
+                      }
+                    }
+                  } catch (error) {
+                    console.error(
+                      "[Progress] Failed to check job status:",
+                      error
+                    );
+                  }
+                }
+              }
             }
 
             if (data.progress === -1 || data.stage === "failed") {
@@ -357,175 +438,88 @@ export default function AudioConverter() {
     });
   };
 
-  const downloadWithPresignedUrl = async (jobId: string): Promise<void> => {
-    console.log("[Download] Requesting presigned URL for jobId:", jobId);
-    
-    const presignedResponse = await fetch(`/api/download?jobId=${jobId}&presigned=true`);
-    if (!presignedResponse.ok) {
-      throw new Error(`Failed to get presigned URL: ${presignedResponse.status}`);
+  const fetchJobDetails = async (jobId: string) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`);
+      if (response.ok) {
+        const jobData = await response.json();
+        if (jobData.outputS3Location?.size) {
+          setConvertedSize(jobData.outputS3Location.size);
+        }
+        // Update the conversion job with complete data
+        setConversionJob((prev) =>
+          prev
+            ? {
+                ...prev,
+                outputS3Location: jobData.outputS3Location,
+              }
+            : null
+        );
+      }
+    } catch (error) {
+      console.error("[Job Details] Failed to fetch job details:", error);
     }
-    
-    const { presignedUrl, size } = await presignedResponse.json();
-    console.log("[Download] Got presigned URL, downloading directly from S3");
-    
-    const fileResponse = await fetch(presignedUrl);
-    if (!fileResponse.ok) {
-      throw new Error(`Failed to download from presigned URL: ${fileResponse.status}`);
-    }
-    
-    const blob = await fileResponse.blob();
-    console.log("[Download] Downloaded via presigned URL, size:", blob.size);
-    
-    const url = URL.createObjectURL(blob);
-    setConvertedUrl(url);
-    setConvertedSize(blob.size);
-    
-    console.log("[Download] Presigned URL download completed successfully");
   };
 
-  const downloadConvertedFile = async (jobId: string): Promise<void> => {
-    const maxRetries = 8;
-    const baseRetryDelay = 500; // Start with 500ms
-
-    // For large files, try presigned URL first
-    if (originalSize > 50 * 1024 * 1024) { // 50MB threshold
-      console.log("[Download] Large file detected, trying presigned URL first");
-      try {
-        await downloadWithPresignedUrl(jobId);
-        return;
-      } catch (presignedError) {
-        console.log("[Download] Presigned URL failed, falling back to streaming:", presignedError.message);
-      }
+  const handleDownload = async () => {
+    if (!conversionJob || !originalFile) {
+      console.error("[Download] Missing conversion job or original file");
+      return;
     }
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(
-          `[Download] Starting download for jobId: ${jobId} (attempt ${attempt}/${maxRetries})`
-        );
+    try {
+      console.log("[Download] Requesting presigned URL for download");
+      setError(null); // Clear any previous errors
+      setIsDownloading(true);
 
-        // Add timeout to the fetch request for large files
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          console.log("[Download] Request timeout, aborting...");
-          controller.abort();
-        }, 60000); // 60 second timeout for large files
+      // Create the desired filename based on original file
+      const nameWithoutExt = originalFile.name.replace(/\.[^/.]+$/, "");
+      const desiredFilename = `${nameWithoutExt}.${
+        conversionJob.format || format
+      }`;
 
-        let downloadResponse;
-        try {
-          downloadResponse = await fetch(`/api/download?jobId=${jobId}`, {
-            signal: controller.signal
-          });
+      const response = await fetch(
+        `/api/download?jobId=${
+          conversionJob.jobId
+        }&presigned=true&filename=${encodeURIComponent(desiredFilename)}`
+      );
 
-          clearTimeout(timeoutId);
-
-          if (downloadResponse.ok) {
-            console.log("[Download] Response received, downloading blob...");
-            const blob = await downloadResponse.blob();
-            console.log("[Download] Downloaded file size:", blob.size);
-
-            if (blob.size === 0) {
-              throw new Error("Downloaded file is empty");
-            }
-
-            const url = URL.createObjectURL(blob);
-            setConvertedUrl(url);
-            setConvertedSize(blob.size);
-
-            console.log("[Download] Converted audio ready for download");
-            return; // Success, exit the retry loop
-          }
-        } catch (fetchError) {
-          clearTimeout(timeoutId);
-          if (fetchError.name === 'AbortError') {
-            throw new Error("Download timeout - file may be too large");
-          }
-          throw fetchError;
-        }
-
-        console.log(`[Download] Response not ok: ${downloadResponse.status} ${downloadResponse.statusText}`);
-        const errorData = await downloadResponse
+      if (!response.ok) {
+        const errorData = await response
           .json()
           .catch(() => ({ error: "Download failed" }));
-        
-        console.log("[Download] Error data:", errorData);
-
-        // Calculate retry delay for this attempt
-        const retryDelay =
-          Math.min(baseRetryDelay * Math.pow(1.5, attempt - 1), 3000) +
-          Math.random() * 200;
-
-        // If it's a "not completed yet" error and we have retries left, wait and retry
-        if (
-          downloadResponse.status === 400 &&
-          errorData.error?.includes("not completed yet") &&
-          attempt < maxRetries
-        ) {
-          console.log(
-            `[Download] Job not ready yet, retrying in ${Math.round(
-              retryDelay
-            )}ms (attempt ${attempt}/${maxRetries})`
-          );
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          continue;
-        }
-
-        // For other errors or if we've exhausted retries, throw the error
         throw new Error(
-          errorData.error ||
-            `Download failed with status ${downloadResponse.status}`
+          errorData.error || `Download failed with status ${response.status}`
         );
-      } catch (error) {
-        if (attempt === maxRetries) {
-          console.error("[Download] Download failed after all retries:", error);
-          setError(
-            error instanceof Error
-              ? error.message
-              : "Failed to download converted audio"
-          );
-          setPhase("error");
-          return;
-        }
-
-        // Calculate retry delay for error handling
-        const retryDelay =
-          Math.min(baseRetryDelay * Math.pow(1.5, attempt - 1), 3000) +
-          Math.random() * 200;
-
-        // If it's not the last attempt and it's a network error, retry
-        if (
-          error instanceof Error &&
-          error.message.includes("not completed yet")
-        ) {
-          console.log(
-            `[Download] Retrying download in ${Math.round(
-              retryDelay
-            )}ms (attempt ${attempt}/${maxRetries})`
-          );
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
-          continue;
-        }
-
-        // For other errors, don't retry
-        console.error("[Download] Download failed:", error);
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to download converted audio"
-        );
-        setPhase("error");
-        return;
       }
-    }
-  };
 
-  const handleDownload = () => {
-    if (convertedUrl && originalFile) {
-      const nameWithoutExt = originalFile.name.replace(/\.[^/.]+$/, "");
+      const { presignedUrl, filename } = await response.json();
+
+      console.log("[Download] Got presigned URL, initiating download");
+
+      // Try direct presigned URL first (fastest method)
+      console.log("[Download] Attempting direct presigned URL download");
       const link = document.createElement("a");
-      link.href = convertedUrl;
-      link.download = `${nameWithoutExt}.${format}`;
+      link.href = presignedUrl;
+      link.download = filename;
+
+      // For better compatibility, add the link to DOM temporarily
+      link.style.display = "none";
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
+
+      console.log("[Download] Direct download initiated successfully");
+    } catch (error) {
+      console.error("[Download] Download failed:", error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Failed to download converted audio"
+      );
+    } finally {
+      // Reset downloading state after a short delay to give user feedback
+      setTimeout(() => setIsDownloading(false), 1000);
     }
   };
 
@@ -541,7 +535,7 @@ export default function AudioConverter() {
     setEstimatedTimeRemaining(null);
     setPhase("idle");
     setError(null);
-
+    setCurrentStage("");
   };
 
   return (
@@ -620,6 +614,7 @@ export default function AudioConverter() {
             uploadedFile={uploadedFile}
             conversionJob={conversionJob}
             error={error}
+            currentStage={currentStage}
           />
 
           <AudioPreview
@@ -628,13 +623,33 @@ export default function AudioConverter() {
             originalSize={originalSize}
             convertedSize={convertedSize}
             onDownload={handleDownload}
+            isCompleted={phase === "completed"}
+            conversionJob={conversionJob}
+            isDownloading={isDownloading}
           />
 
+          {/* FFmpeg Logs Button - Show when converting or completed */}
+          {(phase === "converting" || phase === "s3uploading" || phase === "completed") && conversionJob && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setShowFFmpegLogs(true)}
+                className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+              >
+                📋 View FFmpeg Logs
+              </button>
+            </div>
+          )}
 
+          {/* FFmpeg Logs Viewer Modal */}
+          {conversionJob && (
+            <FFmpegLogsViewer
+              jobId={conversionJob.jobId}
+              isVisible={showFFmpegLogs}
+              onClose={() => setShowFFmpegLogs(false)}
+            />
+          )}
         </>
       )}
-
-
     </main>
   );
 }

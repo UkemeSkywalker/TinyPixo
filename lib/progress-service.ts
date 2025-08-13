@@ -18,6 +18,7 @@ export class ProgressService {
       jobId: partial.jobId || '',
       progress: partial.progress || 0,
       stage: partial.stage || 'unknown',
+      phase: partial.phase || 'upload', // Default to upload phase if not specified
       estimatedTimeRemaining: partial.estimatedTimeRemaining,
       error: partial.error,
       startTime: partial.startTime,
@@ -114,6 +115,33 @@ export class ProgressService {
   }
 
   /**
+   * Transition job to conversion phase
+   */
+  async startConversionPhase(jobId: string): Promise<void> {
+    console.log(`[ProgressService] Starting conversion phase for job ${jobId}`)
+    await dynamodbProgressService.startConversionPhase(jobId)
+  }
+
+  /**
+   * Transition job to S3 upload phase
+   */
+  async startS3UploadPhase(jobId: string): Promise<void> {
+    console.log(`[ProgressService] Starting S3 upload phase for job ${jobId}`)
+    await dynamodbProgressService.startS3UploadPhase(jobId)
+  }
+
+  /**
+   * Update S3 upload progress
+   */
+  async updateS3UploadProgress(
+    jobId: string, 
+    uploadedBytes: number, 
+    totalBytes: number
+  ): Promise<void> {
+    await dynamodbProgressService.updateS3UploadProgress(jobId, uploadedBytes, totalBytes)
+  }
+
+  /**
    * Process FFmpeg stderr line and update progress if needed
    */
   async processFFmpegStderr(
@@ -172,6 +200,20 @@ export class ProgressService {
    */
   getSupportedFormats() {
     return dynamodbProgressService.getSupportedFormats()
+  }
+
+  /**
+   * Get FFmpeg logs for a job
+   */
+  async getFFmpegLogs(jobId: string): Promise<string[]> {
+    console.log(`[ProgressService] Getting FFmpeg logs for job ${jobId}`)
+    
+    try {
+      return await dynamodbProgressService.getFFmpegLogs(jobId)
+    } catch (error) {
+      console.error(`[ProgressService] Failed to get FFmpeg logs for job ${jobId}:`, error)
+      return []
+    }
   }
 
   /**
