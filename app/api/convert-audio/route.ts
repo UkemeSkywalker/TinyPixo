@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jobService, JobStatus, S3Location } from '../../../lib/job-service'
 import { progressService } from '../../../lib/progress-service'
-import { streamingConversionServiceFixed as streamingConversionService } from '../../../lib/streaming-conversion-service-fixed'
+import { smartTempFilesConversionService as streamingConversionService } from '../../../lib/streaming-conversion-service-smart-temp'
 import { s3Client } from '../../../lib/aws-services'
 import { HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 
@@ -64,6 +64,19 @@ export async function POST(request: NextRequest) {
     // Verify input file exists in S3
     const inputS3Location = await verifyInputFile(requestData)
     console.log(`[ConversionAPI] Input file verified: ${inputS3Location.bucket}/${inputS3Location.key} (${inputS3Location.size} bytes)`)
+
+    // Validate file size immediately (return 413 for oversized files)
+    const MAX_FILE_SIZE = 105 * 1024 * 1024 // 105MB
+    if (inputS3Location.size > MAX_FILE_SIZE) {
+      const fileSizeMB = inputS3Location.size / (1024 * 1024)
+      const errorMessage = `File too large (${fileSizeMB.toFixed(1)}MB). Maximum supported size is 105MB.`
+      console.error(`[ConversionAPI] File size validation failed: ${fileSizeMB.toFixed(1)}MB`)
+      
+      return NextResponse.json({
+        error: errorMessage,
+        details: `File size: ${fileSizeMB.toFixed(1)}MB, Maximum: 105MB`
+      }, { status: 413 })
+    }
 
     // Create conversion job
     const job = await createConversionJob(inputS3Location, requestData)
@@ -293,20 +306,31 @@ async function startConversionProcess(job: any, requestData: ConversionRequest):
       phase: 'conversion'
     })
 
-    // Calculate timeout based on file size (more time for larger files)
+    // Validate file size before conversion
     const fileSizeMB = job.inputS3Location.size / (1024 * 1024)
+    const MAX_FILE_SIZE = 105 * 1024 * 1024 // 105MB
+    
+    if (job.inputS3Location.size > MAX_FILE_SIZE) {
+      const errorMessage = `File too large (${fileSizeMB.toFixed(1)}MB). Maximum supported size is 105MB.`
+      await updateJobStatus(jobId, JobStatus.FAILED, undefined, errorMessage)
+      await progressService.markFailed(jobId, errorMessage)
+      console.error(`[ConversionAPI] File size validation failed for job ${jobId}: ${fileSizeMB.toFixed(1)}MB`)
+      throw new Error(errorMessage)
+    }
+
+    // Calculate timeout based on file size (more time for larger files)
     let timeoutMs = 300000 // Base 5 minutes
     
     if (fileSizeMB > 50) {
-      // For files > 50MB: 10 minutes base + 2 minutes per additional 50MB
-      timeoutMs = 600000 + Math.ceil((fileSizeMB - 50) / 50) * 120000
+      // For files > 50MB: 10 minutes base + 1 minute per additional 10MB
+      timeoutMs = 600000 + Math.ceil((fileSizeMB - 50) / 10) * 60000
     } else if (fileSizeMB > 10) {
       // For files > 10MB: 7 minutes
       timeoutMs = 420000
     }
     
-    // Cap at 60 minutes for very large files
-    timeoutMs = Math.min(timeoutMs, 3600000)
+    // Cap at 30 minutes for files up to 105MB
+    timeoutMs = Math.min(timeoutMs, 1800000)
     
     console.log(`[ConversionAPI] File size: ${fileSizeMB.toFixed(1)}MB, timeout: ${(timeoutMs/60000).toFixed(1)} minutes`)
 

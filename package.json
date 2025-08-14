@@ -74,7 +74,13 @@
     "test:redis-endpoint": "tsx scripts/test-redis-endpoint.ts",
     "verify:security-groups": "tsx scripts/verify-security-groups.ts",
     "diagnose:app-runner": "tsx scripts/diagnose-app-runner-failure.ts",
-    "test:redis-detailed": "tsx scripts/test-redis-detailed.ts"
+    "test:redis-detailed": "tsx scripts/test-redis-detailed.ts",
+    "cleanup:stale": "tsx scripts/cleanup-stale-progress.ts",
+    "test:3phase": "tsx scripts/test-3-phase-progress.ts",
+    "test:s3-fix": "tsx scripts/test-s3-upload-fix.ts",
+    "diagnose:stuck": "tsx scripts/diagnose-stuck-conversion.ts",
+    "timeout:stuck": "tsx scripts/add-conversion-timeout.ts",
+    "investigate:large": "tsx scripts/investigate-large-file-issue.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apprunner": "^3.864.0",

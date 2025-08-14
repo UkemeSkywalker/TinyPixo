@@ -50,6 +50,15 @@ export default function AudioConverter() {
   const [showFFmpegLogs, setShowFFmpegLogs] = useState<boolean>(false);
 
   const handleAudioUpload = async (file: File) => {
+    // File size validation (frontend check)
+    const MAX_FILE_SIZE = 105 * 1024 * 1024; // 105MB
+    if (file.size > MAX_FILE_SIZE) {
+      const fileSizeMB = (file.size / 1024 / 1024).toFixed(1);
+      setError(`File too large (${fileSizeMB}MB). Please select a file smaller than 105MB.`);
+      setPhase("error");
+      return;
+    }
+
     setOriginalFile(file);
     setOriginalSize(file.size);
     setUploadedFile(null);
@@ -60,6 +69,13 @@ export default function AudioConverter() {
 
     // Start upload immediately
     await uploadFile(file);
+  };
+
+  const handleFileSizeError = (fileSize: number, maxSize: number) => {
+    const fileSizeMB = (fileSize / 1024 / 1024).toFixed(1);
+    const maxSizeMB = (maxSize / 1024 / 1024).toFixed(0);
+    setError(`File too large (${fileSizeMB}MB). Please select a file smaller than ${maxSizeMB}MB.`);
+    setPhase("error");
   };
 
   const uploadFile = async (file: File): Promise<void> => {
@@ -346,6 +362,17 @@ export default function AudioConverter() {
               return;
             }
 
+            // Handle failed jobs - stop polling
+            if (data.progress < 0 || data.stage === "failed") {
+              console.log(
+                "[Progress] Job failed - stopping progress polling"
+              );
+              setPhase("error");
+              setError(data.error || "Conversion failed");
+              resolve();
+              return;
+            }
+
             // Handle large files that exceed estimated duration
             if (data.progress >= 99 && data.stage === "processing") {
               // Check if this is a large file taking longer than expected
@@ -554,6 +581,7 @@ export default function AudioConverter() {
 
           <AudioUpload
             onAudioUpload={handleAudioUpload}
+            onFileSizeError={handleFileSizeError}
             isUploading={isUploading}
             uploadProgress={uploadProgress}
           />
@@ -583,7 +611,7 @@ export default function AudioConverter() {
                 Large Files
               </h3>
               <p className="text-gray-400">
-                Support for audio files up to 500MB with reliable upload.
+                Support for audio files up to 105MB with reliable conversion.
               </p>
             </div>
           </div>

@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-08-14T21:26:12.150Z",
+  "summary": {
+    "passed": 17,
+    "total": 17,
+    "percentage": 100
+  },
+  "results": [
+    {
+      "test": "Frontend MAX_FILE_SIZE",
+      "passed": true,
+      "message": "Correctly set to 105MB"
+    },
+    {
+      "test": "Frontend UI Text",
+      "passed": true,
+      "message": "UI shows 105MB limit"
+    },
+    {
+      "test": "Frontend Page Validation",
+      "passed": true,
+      "message": "Page has 105MB validation"
+    },
+    {
+      "test": "Upload API MAX_FILE_SIZE",
+      "passed": true,
+      "message": "Correctly set to 105MB"
+    },
+    {
+      "test": "Convert API MAX_FILE_SIZE",
+      "passed": true,
+      "message": "Correctly set to 105MB"
+    },
+    {
+      "test": "Upload validation: 50MB file",
+      "passed": true,
+      "message": "50.0MB - would pass"
+    },
+    {
+      "test": "Upload validation: 105MB file",
+      "passed": true,
+      "message": "105.0MB - would pass"
+    },
+    {
+      "test": "Upload validation: 106MB file",
+      "passed": true,
+      "message": "106.0MB - would be rejected"
+    },
+    {
+      "test": "Upload validation: 200MB file",
+      "passed": true,
+      "message": "200.0MB - would be rejected"
+    },
+    {
+      "test": "Convert validation: 50MB file",
+      "passed": true,
+      "message": "50.0MB - would pass"
+    },
+    {
+      "test": "Convert validation: 105MB file",
+      "passed": true,
+      "message": "105.0MB - would pass"
+    },
+    {
+      "test": "Convert validation: 106MB file",
+      "passed": true,
+      "message": "106.0MB - would be rejected"
+    },
+    {
+      "test": "Convert validation: 500MB file",
+      "passed": true,
+      "message": "500.0MB - would be rejected"
+    },
+    {
+      "test": "Size calculation: 1.0 MB",
+      "passed": true,
+      "message": "1048576 bytes = 1.0 MB"
+    },
+    {
+      "test": "Size calculation: 50.0 MB",
+      "passed": true,
+      "message": "52428800 bytes = 50.0 MB"
+    },
+    {
+      "test": "Size calculation: 105.0 MB",
+      "passed": true,
+      "message": "110100480 bytes = 105.0 MB"
+    },
+    {
+      "test": "Size calculation: 106.0 MB",
+      "passed": true,
+      "message": "111149056 bytes = 106.0 MB"
+    }
+  ]
+}

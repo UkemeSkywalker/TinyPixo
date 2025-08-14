@@ -2,11 +2,15 @@ import React, { useRef } from 'react'
 
 interface AudioUploadProps {
   onAudioUpload: (file: File) => void
+  onFileSizeError?: (fileSize: number, maxSize: number) => void
   isUploading?: boolean
   uploadProgress?: number
 }
 
-export default function AudioUpload({ onAudioUpload, isUploading = false, uploadProgress = 0 }: AudioUploadProps) {
+// File size limit: 105MB
+const MAX_FILE_SIZE = 105 * 1024 * 1024
+
+export default function AudioUpload({ onAudioUpload, onFileSizeError, isUploading = false, uploadProgress = 0 }: AudioUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleClick = () => {
@@ -16,6 +20,14 @@ export default function AudioUpload({ onAudioUpload, isUploading = false, upload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      if (file.size > MAX_FILE_SIZE) {
+        onFileSizeError?.(file.size, MAX_FILE_SIZE)
+        // Clear the input so user can select a different file
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
       onAudioUpload(file)
     }
   }
@@ -24,6 +36,10 @@ export default function AudioUpload({ onAudioUpload, isUploading = false, upload
     e.preventDefault()
     const file = e.dataTransfer.files[0]
     if (file) {
+      if (file.size > MAX_FILE_SIZE) {
+        onFileSizeError?.(file.size, MAX_FILE_SIZE)
+        return
+      }
       onAudioUpload(file)
     }
   }
@@ -68,7 +84,7 @@ export default function AudioUpload({ onAudioUpload, isUploading = false, upload
             )}
             <div className="inline-flex items-center gap-2 text-sm text-purple-400 bg-purple-900/30 px-4 py-2 rounded-full">
               <span>🎧</span>
-              <span>Supports: MP3, WAV, FLAC, AAC, OGG</span>
+              <span>Supports: MP3, WAV, FLAC, AAC, OGG (Max: 105MB)</span>
             </div>
           </div>
           <input 

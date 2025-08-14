@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { streamingConversionServiceFixed as streamingConvetreaming-conversion-service'
+import { streamingConversionServiceFixed as streamingConversionService } from '../../../lib/streaming-conversion-service-fixed'
 import { jobService, JobStatus } from '../../../lib/job-service'
 import { s3Client } from '../../../lib/aws-services'
 import { PutObjectCommand } from '@aws-sdk/client-s3'

@@ -1,0 +1,112 @@
+{
+  "timestamp": "2025-08-14T21:26:12.296Z",
+  "summary": {
+    "passed": 18,
+    "total": 19,
+    "percentage": 95
+  },
+  "results": [
+    {
+      "test": "Service file exists",
+      "passed": true,
+      "message": "Smart temp files service found"
+    },
+    {
+      "test": "Service Implementation",
+      "passed": false,
+      "message": "Error testing service: Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/ukeme/TinyPixo/lib/aws-services' imported from /Users/ukeme/TinyPixo/lib/streaming-conversion-service-smart-temp.ts"
+    },
+    {
+      "test": "Temp file creation",
+      "passed": true,
+      "message": "Can create temp files"
+    },
+    {
+      "test": "Temp file size",
+      "passed": true,
+      "message": "1048576 bytes"
+    },
+    {
+      "test": "Temp file cleanup",
+      "passed": true,
+      "message": "File cleaned up successfully"
+    },
+    {
+      "test": "Temp directory writable",
+      "passed": true,
+      "message": "/tmp is writable"
+    },
+    {
+      "test": "Baseline memory",
+      "passed": true,
+      "message": "RSS: 135.3 MB, Heap: 11.1 MB"
+    },
+    {
+      "test": "Memory efficiency",
+      "passed": true,
+      "message": "Memory increase: NaN undefined (-0.1% of file size)"
+    },
+    {
+      "test": "No memory leaks",
+      "passed": true,
+      "message": "Memory usage stable after multiple operations"
+    },
+    {
+      "test": "S3 streaming upload",
+      "passed": true,
+      "message": "Uses createReadStream"
+    },
+    {
+      "test": "No buffer reads in S3",
+      "passed": true,
+      "message": "No memory buffer reads"
+    },
+    {
+      "test": "mp3 streaming support",
+      "passed": true,
+      "message": "mp3 supports file-to-file conversion"
+    },
+    {
+      "test": "wav streaming support",
+      "passed": true,
+      "message": "wav supports file-to-file conversion"
+    },
+    {
+      "test": "aac streaming support",
+      "passed": true,
+      "message": "aac supports file-to-file conversion"
+    },
+    {
+      "test": "ogg streaming support",
+      "passed": true,
+      "message": "ogg supports file-to-file conversion"
+    },
+    {
+      "test": "flac streaming support",
+      "passed": true,
+      "message": "flac supports file-to-file conversion"
+    },
+    {
+      "test": "Test files created",
+      "passed": true,
+      "message": "All test files created"
+    },
+    {
+      "test": "Cleanup on success",
+      "passed": true,
+      "message": "All files cleaned up"
+    },
+    {
+      "test": "Cleanup on error",
+      "passed": true,
+      "message": "Error cleanup works"
+    }
+  ],
+  "memoryUsage": {
+    "rss": 202276864,
+    "heapTotal": 16875520,
+    "heapUsed": 11528128,
+    "external": 10012660,
+    "arrayBuffers": 20047
+  }
+}

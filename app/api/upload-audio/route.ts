@@ -26,7 +26,7 @@ const SUPPORTED_MIME_TYPES = [
 ]
 
 // File size limits
-const MAX_FILE_SIZE = 500 * 1024 * 1024 // 500MB
+const MAX_FILE_SIZE = 105 * 1024 * 1024 // 105MB
 const MIN_CHUNK_SIZE = 5 * 1024 * 1024 // 5MB minimum for multipart
 const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks
 
@@ -104,7 +104,7 @@ function validateFileByName(fileName: string, fileSize: number): ValidationResul
   if (fileSize > MAX_FILE_SIZE) {
     return {
       valid: false,
-      error: `File size ${(fileSize / 1024 / 1024).toFixed(1)}MB exceeds maximum allowed size of ${MAX_FILE_SIZE / 1024 / 1024}MB`
+      error: `File too large (${(fileSize / 1024 / 1024).toFixed(1)}MB). Please upload a file smaller than ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB.`
     }
   }
 

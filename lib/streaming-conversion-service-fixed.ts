@@ -1,7 +1,8 @@
 import { spawn, ChildProcess } from 'child_process'
-import { Readable, PassThrough } from 'stream'
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
-import { writeFileSync, unlinkSync, readFileSync } from 'fs'
+import { Readable, createWriteStream, createReadStream } from 'stream'
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3'
+import { writeFileSync, unlinkSync, statSync } from 'fs'
+import { pipeline } from 'stream/promises'
 import { s3Client } from './aws-services'
 import { Job, JobStatus, S3Location } from './job-service'
 import { progressService } from './progress-service'
@@ -72,14 +73,12 @@ export class StreamingConversionServiceFixed {
     
     console.log(`[StreamingFixed] Starting streaming conversion: ${job.inputS3Location.key} -> ${outputKey}`)
 
-    // Check file size and use appropriate strategy
+    // Check file size and validate limits
     const fileSizeMB = job.inputS3Location.size / (1024 * 1024)
     console.log(`[StreamingFixed] File size: ${fileSizeMB.toFixed(2)} MB`)
 
-    if (fileSizeMB > 100) {
-      console.log(`[StreamingFixed] Large file detected (${fileSizeMB.toFixed(2)} MB), using fallback conversion`)
-      return this.fallbackFileConversion(job, options)
-    }
+    // All files now use smart temporary files approach (no memory buffers)
+    console.log(`[StreamingFixed] Using smart temporary files approach for ${fileSizeMB.toFixed(2)}MB file`)
 
     return new Promise(async (resolve, reject) => {
       try {
@@ -701,6 +700,106 @@ export class StreamingConversionServiceFixed {
 
     await Promise.all(cleanupPromises)
     this.activeProcesses.clear()
+  }
+
+  /**
+   * Stream S3 file to temporary file (no memory buffer)
+   */
+  private async streamS3ToTempFile(s3Location: S3Location, tempFilePath: string, jobId: string): Promise<void> {
+    console.log(`[StreamingFixed] Streaming S3 file to temp: ${s3Location.key} -> ${tempFilePath}`)
+    
+    try {
+      // Get S3 object stream
+      const response = await this.client.send(new GetObjectCommand({
+        Bucket: s3Location.bucket,
+        Key: s3Location.key
+      }))
+
+      if (!response.Body) {
+        throw new Error('Failed to get S3 object body')
+      }
+
+      // Create write stream to temp file
+      const writeStream = createWriteStream(tempFilePath)
+      
+      // Track download progress
+      let downloadedBytes = 0
+      const totalBytes = s3Location.size
+      
+      const inputStream = response.Body as Readable
+      inputStream.on('data', async (chunk) => {
+        downloadedBytes += chunk.length
+        
+        // Update progress every 5MB or 10% of file
+        const progressThreshold = Math.min(5 * 1024 * 1024, totalBytes * 0.1)
+        if (downloadedBytes % Math.floor(progressThreshold) < chunk.length) {
+          const downloadProgress = Math.min(20, Math.floor((downloadedBytes / totalBytes) * 20))
+          try {
+            await progressService.setProgress(jobId, {
+              jobId,
+              progress: downloadProgress,
+              stage: `downloading for conversion (${(downloadedBytes / 1024 / 1024).toFixed(1)}MB / ${(totalBytes / 1024 / 1024).toFixed(1)}MB)`,
+              phase: 'conversion'
+            })
+          } catch (error) {
+            console.error(`[StreamingFixed] Progress update error:`, error)
+          }
+        }
+      })
+
+      // Stream S3 -> temp file (no memory buffer)
+      await pipeline(inputStream, writeStream)
+      
+      console.log(`[StreamingFixed] S3 stream to temp file completed: ${downloadedBytes} bytes`)
+    } catch (error) {
+      console.error(`[StreamingFixed] S3 to temp file streaming failed:`, error)
+      throw new Error(`Failed to stream S3 file to temp: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Stream temporary file to S3 (no memory buffer)
+   */
+  private async streamTempFileToS3(tempFilePath: string, outputKey: string, bucket: string, jobId: string): Promise<void> {
+    console.log(`[StreamingFixed] Streaming temp file to S3: ${tempFilePath} -> ${outputKey}`)
+    
+    try {
+      // Use S3 upload service with streaming (no memory buffer)
+      await s3UploadService.uploadWithProgress({
+        bucket,
+        key: outputKey,
+        filePath: tempFilePath,
+        jobId,
+        contentType: this.getContentTypeFromKey(outputKey)
+      })
+      
+      console.log(`[StreamingFixed] Temp file to S3 streaming completed`)
+    } catch (error) {
+      console.error(`[StreamingFixed] Temp file to S3 streaming failed:`, error)
+      throw new Error(`Failed to stream temp file to S3: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  /**
+   * Get file extension from S3 key
+   */
+  private getFileExtension(key: string): string {
+    const parts = key.split('.')
+    return parts.length > 1 ? parts[parts.length - 1] : 'unknown'
+  }
+
+  /**
+   * Clean up temporary files
+   */
+  private cleanupTempFiles(tempPaths: string[]): void {
+    for (const tempPath of tempPaths) {
+      try {
+        unlinkSync(tempPath)
+        console.log(`[StreamingFixed] Cleaned up temp file: ${tempPath}`)
+      } catch (error) {
+        console.warn(`[StreamingFixed] Failed to cleanup temp file ${tempPath}:`, error)
+      }
+    }
   }
 }
 

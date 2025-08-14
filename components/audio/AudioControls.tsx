@@ -169,6 +169,11 @@ export default function AudioControls({
                 </span>
               )}
             </p>
+            {getSubPhaseText() && (
+              <p className="text-xs text-purple-300 mt-1">
+                {getSubPhaseText()}
+              </p>
+            )}
             {(phase === 'converting' || phase === 's3uploading') && currentProgress < 100 && (
               <p className="text-xs text-purple-300 mt-1 animate-pulse">
                 {phase === 's3uploading' 
@@ -206,6 +211,19 @@ export default function AudioControls({
       case 's3uploading': return 'Phase 3: Uploading to cloud storage...'
       default: return 'Processing...'
     }
+  }
+
+  function getSubPhaseText(): string {
+    if (phase === 'converting' && currentStage) {
+      if (currentStage.includes('downloading')) return 'Sub-phase: Downloading from cloud storage'
+      if (currentStage.includes('analyzing')) return 'Sub-phase: Analyzing audio properties'
+      if (currentStage.includes('converting') || currentStage.includes('processing')) return 'Sub-phase: Converting audio format'
+      if (currentStage.includes('finalizing')) return 'Sub-phase: Finalizing conversion'
+    }
+    if (phase === 's3uploading' && currentStage) {
+      if (currentStage.includes('uploading')) return 'Sub-phase: Streaming to cloud storage'
+    }
+    return ''
   }
 }
 

@@ -1,0 +1,335 @@
+{
+  "timestamp": "2025-08-14T21:26:44.378Z",
+  "summary": {
+    "passed": 12,
+    "total": 12,
+    "percentage": 100
+  },
+  "results": [
+    {
+      "test": "Baseline RSS",
+      "passed": true,
+      "message": "192.9MB RSS"
+    },
+    {
+      "test": "Baseline Heap",
+      "passed": true,
+      "message": "10.8MB heap used"
+    },
+    {
+      "test": "Memory reporting",
+      "passed": true,
+      "message": "Available: 88.1 MB, Total: 8 GB"
+    },
+    {
+      "test": "10MB processing",
+      "passed": true,
+      "message": "Memory increase: 119.4 KB (1.2% of file size)"
+    },
+    {
+      "test": "50MB processing",
+      "passed": true,
+      "message": "Memory increase: NaN undefined (-11.3% of file size)"
+    },
+    {
+      "test": "100MB processing",
+      "passed": true,
+      "message": "Memory increase: 181.2 KB (0.2% of file size)"
+    },
+    {
+      "test": "Memory stability",
+      "passed": true,
+      "message": "Trend: stable, Max increase: 307.6 KB"
+    },
+    {
+      "test": "No memory spikes",
+      "passed": true,
+      "message": "No significant spikes"
+    },
+    {
+      "test": "No memory leaks",
+      "passed": true,
+      "message": "Memory increase after 20 operations: 0.0MB"
+    },
+    {
+      "test": "Heap growth rate",
+      "passed": true,
+      "message": "0.002% heap growth per byte processed"
+    },
+    {
+      "test": "GC effectiveness",
+      "passed": true,
+      "message": "Allocated: 185.8 KB, Freed: 198.3 KB (106.8%)"
+    },
+    {
+      "test": "GC performance",
+      "passed": true,
+      "message": "GC took 2ms"
+    }
+  ],
+  "memorySnapshots": [
+    {
+      "timestamp": 1755206773659,
+      "rss": 138002432,
+      "heapUsed": 7528064,
+      "heapTotal": 17563648,
+      "external": 31031347,
+      "arrayBuffers": 20988295
+    },
+    {
+      "timestamp": 1755206774659,
+      "rss": 126500864,
+      "heapUsed": 7531944,
+      "heapTotal": 17563648,
+      "external": 31031347,
+      "arrayBuffers": 20988295
+    },
+    {
+      "timestamp": 1755206775661,
+      "rss": 146571264,
+      "heapUsed": 7683896,
+      "heapTotal": 17563648,
+      "external": 52002867,
+      "arrayBuffers": 41959815
+    },
+    {
+      "timestamp": 1755206776661,
+      "rss": 75743232,
+      "heapUsed": 7687688,
+      "heapTotal": 17563648,
+      "external": 52002867,
+      "arrayBuffers": 41959815
+    },
+    {
+      "timestamp": 1755206777663,
+      "rss": 73334784,
+      "heapUsed": 7839352,
+      "heapTotal": 17563648,
+      "external": 72974387,
+      "arrayBuffers": 62931335
+    },
+    {
+      "timestamp": 1755206778663,
+      "rss": 73498624,
+      "heapUsed": 7843064,
+      "heapTotal": 17563648,
+      "external": 72974387,
+      "arrayBuffers": 62931335
+    },
+    {
+      "timestamp": 1755206779664,
+      "rss": 91242496,
+      "heapUsed": 7466032,
+      "heapTotal": 10223616,
+      "external": 26771507,
+      "arrayBuffers": 16728455
+    },
+    {
+      "timestamp": 1755206780665,
+      "rss": 83034112,
+      "heapUsed": 7473608,
+      "heapTotal": 10223616,
+      "external": 26771507,
+      "arrayBuffers": 16728455
+    },
+    {
+      "timestamp": 1755206781667,
+      "rss": 103399424,
+      "heapUsed": 7638336,
+      "heapTotal": 10223616,
+      "external": 47743027,
+      "arrayBuffers": 37699975
+    },
+    {
+      "timestamp": 1755206782668,
+      "rss": 76972032,
+      "heapUsed": 7642160,
+      "heapTotal": 10223616,
+      "external": 47743027,
+      "arrayBuffers": 37699975
+    },
+    {
+      "timestamp": 1755206783669,
+      "rss": 99827712,
+      "heapUsed": 7767608,
+      "heapTotal": 10223616,
+      "external": 68714547,
+      "arrayBuffers": 58671495
+    },
+    {
+      "timestamp": 1755206784669,
+      "rss": 64929792,
+      "heapUsed": 7771320,
+      "heapTotal": 10223616,
+      "external": 68714547,
+      "arrayBuffers": 58671495
+    },
+    {
+      "timestamp": 1755206785670,
+      "rss": 83230720,
+      "heapUsed": 7361696,
+      "heapTotal": 10223616,
+      "external": 89686067,
+      "arrayBuffers": 1196423
+    },
+    {
+      "timestamp": 1755206786671,
+      "rss": 78413824,
+      "heapUsed": 7369080,
+      "heapTotal": 10223616,
+      "external": 89686067,
+      "arrayBuffers": 1196423
+    },
+    {
+      "timestamp": 1755206787671,
+      "rss": 88571904,
+      "heapUsed": 7495736,
+      "heapTotal": 10223616,
+      "external": 32210995,
+      "arrayBuffers": 22167943
+    },
+    {
+      "timestamp": 1755206788672,
+      "rss": 80183296,
+      "heapUsed": 7499616,
+      "heapTotal": 10223616,
+      "external": 32210995,
+      "arrayBuffers": 22167943
+    },
+    {
+      "timestamp": 1755206789674,
+      "rss": 90095616,
+      "heapUsed": 7620144,
+      "heapTotal": 10223616,
+      "external": 53182515,
+      "arrayBuffers": 43139463
+    },
+    {
+      "timestamp": 1755206790675,
+      "rss": 82690048,
+      "heapUsed": 7623856,
+      "heapTotal": 10223616,
+      "external": 53182515,
+      "arrayBuffers": 43139463
+    },
+    {
+      "timestamp": 1755206791676,
+      "rss": 101416960,
+      "heapUsed": 7698784,
+      "heapTotal": 10223616,
+      "external": 74154035,
+      "arrayBuffers": 64110983
+    },
+    {
+      "timestamp": 1755206792676,
+      "rss": 79757312,
+      "heapUsed": 7702472,
+      "heapTotal": 10223616,
+      "external": 74154035,
+      "arrayBuffers": 64110983
+    },
+    {
+      "timestamp": 1755206793676,
+      "rss": 99205120,
+      "heapUsed": 6986576,
+      "heapTotal": 10223616,
+      "external": 26771507,
+      "arrayBuffers": 16728455
+    },
+    {
+      "timestamp": 1755206794678,
+      "rss": 97828864,
+      "heapUsed": 6994016,
+      "heapTotal": 10223616,
+      "external": 26771507,
+      "arrayBuffers": 16728455
+    },
+    {
+      "timestamp": 1755206795678,
+      "rss": 95928320,
+      "heapUsed": 7068584,
+      "heapTotal": 10223616,
+      "external": 47743027,
+      "arrayBuffers": 37699975
+    },
+    {
+      "timestamp": 1755206796680,
+      "rss": 95993856,
+      "heapUsed": 7072440,
+      "heapTotal": 10223616,
+      "external": 47743027,
+      "arrayBuffers": 37699975
+    },
+    {
+      "timestamp": 1755206797681,
+      "rss": 108216320,
+      "heapUsed": 7147128,
+      "heapTotal": 10223616,
+      "external": 68714547,
+      "arrayBuffers": 58671495
+    },
+    {
+      "timestamp": 1755206798682,
+      "rss": 90832896,
+      "heapUsed": 7150840,
+      "heapTotal": 10223616,
+      "external": 68714547,
+      "arrayBuffers": 58671495
+    },
+    {
+      "timestamp": 1755206799683,
+      "rss": 102301696,
+      "heapUsed": 6322888,
+      "heapTotal": 9732096,
+      "external": 89686067,
+      "arrayBuffers": 3555719
+    },
+    {
+      "timestamp": 1755206800685,
+      "rss": 82591744,
+      "heapUsed": 6330272,
+      "heapTotal": 9732096,
+      "external": 89686067,
+      "arrayBuffers": 3555719
+    },
+    {
+      "timestamp": 1755206801686,
+      "rss": 88014848,
+      "heapUsed": 6404952,
+      "heapTotal": 9732096,
+      "external": 34570291,
+      "arrayBuffers": 24527239
+    },
+    {
+      "timestamp": 1755206802688,
+      "rss": 72220672,
+      "heapUsed": 6408664,
+      "heapTotal": 9732096,
+      "external": 34570291,
+      "arrayBuffers": 24527239
+    },
+    {
+      "timestamp": 1755206802889,
+      "rss": 79413248,
+      "heapUsed": 6319368,
+      "heapTotal": 9732096,
+      "external": 34570291,
+      "arrayBuffers": 20529543
+    },
+    {
+      "timestamp": 1755206804066,
+      "rss": 122126336,
+      "heapUsed": 6328104,
+      "heapTotal": 10780672,
+      "external": 41123891,
+      "arrayBuffers": 16775
+    }
+  ],
+  "finalMemoryUsage": {
+    "rss": 390201344,
+    "heapTotal": 10780672,
+    "heapUsed": 6334768,
+    "external": 11108403,
+    "arrayBuffers": 16775
+  }
+}

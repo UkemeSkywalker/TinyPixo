@@ -65,38 +65,30 @@ export class S3UploadService {
   }
 
   /**
-   * Single upload for small files
+   * Single upload for small files using streaming (no memory buffer)
    */
   private async singleUpload(options: S3UploadOptions, fileSize: number): Promise<S3UploadResult> {
     const { bucket, key, filePath, jobId, contentType } = options
 
-    console.log(`[S3UploadService] Using single upload for job ${jobId}`)
+    console.log(`[S3UploadService] Using single upload with streaming for job ${jobId}`)
 
+    // Update progress to show upload starting
+    await progressService.updateS3UploadProgress(jobId, 0, fileSize)
+
+    // Create read stream from file (no memory buffer)
     const fileStream = createReadStream(filePath)
-    let uploadedBytes = 0
-
-    // Track progress during stream read
-    fileStream.on('data', (chunk) => {
-      uploadedBytes += chunk.length
-      // Update progress (throttled internally)
-      progressService.updateS3UploadProgress(jobId, uploadedBytes, fileSize).catch(err => {
-        console.error(`[S3UploadService] Failed to update progress for job ${jobId}:`, err)
-      })
-    })
-
-    // Upload to S3 using PutObjectCommand
+    
+    console.log(`[S3UploadService] Starting S3 upload with streaming for job ${jobId}`)
     const uploadResult = await this.client.send(new PutObjectCommand({
       Bucket: bucket,
       Key: key,
       Body: fileStream,
-      ContentType: contentType
+      ContentType: contentType,
+      ContentLength: fileSize
     }))
 
-    // Get final object info
-    const headResult = await this.client.send(new HeadObjectCommand({
-      Bucket: bucket,
-      Key: key
-    }))
+    // Update progress to 100% after successful upload
+    await progressService.updateS3UploadProgress(jobId, fileSize, fileSize)
 
     console.log(`[S3UploadService] Single upload completed for job ${jobId}`)
 
@@ -104,7 +96,7 @@ export class S3UploadService {
       location: `https://${bucket}.s3.amazonaws.com/${key}`,
       bucket,
       key,
-      etag: headResult.ETag || uploadResult.ETag || '',
+      etag: uploadResult.ETag || '',
       size: fileSize
     }
   }
