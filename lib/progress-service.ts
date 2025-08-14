@@ -81,6 +81,7 @@ export class ProgressService {
           jobId,
           progress: this.getProgressFromJobStatus(job),
           stage: job.status,
+          phase: this.getPhaseFromJobStatus(job), // Determine phase from job status
           error: job.error,
           ttl: Math.floor(Date.now() / 1000) + 3600,
           updatedAt: Date.now()
@@ -244,6 +245,24 @@ export class ProgressService {
         return -1
       default:
         return 0
+    }
+  }
+
+  /**
+   * Convert job status to phase for job service fallback
+   */
+  private getPhaseFromJobStatus(job: Job): 'upload' | 'conversion' | 's3upload' | 'completed' {
+    switch (job.status) {
+      case 'created':
+        return 'upload'
+      case 'processing':
+        return 'conversion' // Assume conversion phase if processing
+      case 'completed':
+        return 'completed'
+      case 'failed':
+        return 'completed' // Failed is still a completion state
+      default:
+        return 'upload'
     }
   }
 }

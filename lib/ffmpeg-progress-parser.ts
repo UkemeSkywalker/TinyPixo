@@ -265,6 +265,7 @@ export class FFmpegProgressParser {
       jobId,
       progress: Math.round(progress * 100) / 100, // Round to 2 decimal places
       stage,
+      phase: 'conversion', // FFmpeg progress is always in conversion phase
       estimatedTimeRemaining,
       currentTime: currentTime ? this.formatSecondsToTime(currentTime) : undefined,
       totalDuration: duration ? this.formatSecondsToTime(duration) : undefined,

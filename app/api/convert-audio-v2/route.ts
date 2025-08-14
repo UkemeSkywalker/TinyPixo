@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { streamingConversionServiceFixed as streamingConvetreaming-conversion-service'
+import { streamingConversionServiceFixed as streamingConversionService } from '../../../lib/streaming-conversion-service-fixed'
 import { jobService, JobStatus } from '../../../lib/job-service'
 import { s3Client } from '../../../lib/aws-services'
 import { PutObjectCommand } from '@aws-sdk/client-s3'
@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
     // Upload file to S3
     const inputKey = `uploads/${Date.now()}-${file.name}`
     const bucket = process.env.S3_BUCKET_NAME || 'audio-conversion-bucket'
-    
+
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    
+
     await s3Client.send(new PutObjectCommand({
       Bucket: bucket,
       Key: inputKey,
@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
     if (result.success && result.outputS3Location) {
       // Update job status
       await jobService.updateJobStatus(
-        job.jobId, 
-        JobStatus.COMPLETED, 
+        job.jobId,
+        JobStatus.COMPLETED,
         result.outputS3Location
       )
 
@@ -85,9 +85,9 @@ export async function POST(request: NextRequest) {
     } else {
       // Update job status to failed
       await jobService.updateJobStatus(
-        job.jobId, 
-        JobStatus.FAILED, 
-        undefined, 
+        job.jobId,
+        JobStatus.FAILED,
+        undefined,
         result.error
       )
 
@@ -103,9 +103,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('[ConvertAudioV2] API error:', error)
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: false,
-      error: 'Internal server error' 
+      error: 'Internal server error'
     }, { status: 500 })
   }
 }
@@ -146,8 +146,8 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('[ConvertAudioV2] Status check error:', error)
-    return NextResponse.json({ 
-      error: 'Failed to get job status' 
+    return NextResponse.json({
+      error: 'Failed to get job status'
     }, { status: 500 })
   }
 }
