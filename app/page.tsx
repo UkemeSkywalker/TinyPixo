@@ -78,7 +78,7 @@ export default function Home() {
         const blob = await response.blob();
         formData.append("image", blob);
       }
-      
+
       formData.append("format", format);
       formData.append("quality", quality.toString());
       formData.append("jobId", jobId);
@@ -389,7 +389,6 @@ export default function Home() {
               height={height}
               maintainAspect={maintainAspect}
               onFormatChange={(newFormat) => {
-
                 setFormat(newFormat);
                 setTimeout(() => processImage(), 100);
               }}
@@ -404,12 +403,10 @@ export default function Home() {
               onHeightChange={(newHeight) => {
                 setHeight(newHeight);
                 setTimeout(() => processImage(), 100);
-
               }}
               onMaintainAspectChange={setMaintainAspect}
               onPercentageResize={(percentage) => {
                 if (originalDimensions) {
-
                   const newWidth = Math.round(
                     originalDimensions.width * (percentage / 100)
                   );
@@ -419,7 +416,6 @@ export default function Home() {
                   setWidth(newWidth);
                   setHeight(newHeight);
                   setTimeout(() => processImage(), 100);
-
                 }
               }}
             />
@@ -487,5 +483,4 @@ export default function Home() {
       )}
     </>
   );
-
 }
