@@ -1,0 +1,57 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:CreateMultipartUpload",
+        "s3:UploadPart",
+        "s3:CompleteMultipartUpload",
+        "s3:AbortMultipartUpload",
+        "s3:ListMultipartUploads",
+        "s3:ListParts"
+      ],
+      "Resource": [
+        "arn:aws:s3:::audio-conversion-app-bucket",
+        "arn:aws:s3:::audio-conversion-app-bucket/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:UpdateTimeToLive"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:us-east-1:910883278292:table/audio-conversion-jobs",
+        "arn:aws:dynamodb:us-east-1:910883278292:table/audio-conversion-progress",
+        "arn:aws:dynamodb:us-east-1:910883278292:table/audio-conversion-uploads"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": [
+        "arn:aws:logs:us-east-1:910883278292:log-group:/aws/apprunner/*"
+      ]
+    }
+  ]
+}
