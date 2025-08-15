@@ -14,13 +14,15 @@ export async function GET(request: NextRequest) {
     
     console.log(`[Upload Progress API] Request for fileId: ${fileId}`)
     
-    // Get upload progress from DynamoDB
+    // Get upload progress from DynamoDB only (no in-memory fallback)
     const uploadData = await dynamodbProgressService.getUploadProgress(fileId)
     
     if (!uploadData) {
-      console.log(`[Upload Progress API] Upload ${fileId} not found`)
+      console.log(`[Upload Progress API] Upload ${fileId} not found in DynamoDB`)
       return NextResponse.json({ error: 'Upload not found' }, { status: 404 })
     }
+    
+    console.log(`[Upload Progress API] Found upload progress for ${fileId}: ${uploadData.stage} (${uploadData.completedChunks}/${uploadData.totalChunks} chunks)`)
     
     const progressPercent = Math.round((uploadData.uploadedSize / uploadData.totalSize) * 100)
     

@@ -3,11 +3,12 @@ runtime: docker
 build:
   commands:
     build:
-      - echo "Building with Docker runtime using Dockerfile.dev for linux/amd64"
-      - docker build --platform linux/amd64 -f Dockerfile.dev -t tinypixo-audio:v2.0.0 .
+      - echo "Building Smart Temporary Files + 105MB Limit Audio Conversion App"
+      - echo "Using optimized Dockerfile.dev for linux/amd64 with enhanced audio processing"
+      - docker build --platform linux/amd64 -f Dockerfile.prod -t tinypixo-audio:v3.0.0 .
 run:
   runtime-version: docker
-  command: docker run -p 3000:3000 tinypixo-audio:v2.0.0
+  command: docker run -p 3000:3000 tinypixo-audio:v3.0.0-smart-temp
   network:
     port: 3000
     env: PORT
@@ -15,10 +16,18 @@ run:
     # Core application settings
     - name: NODE_ENV
       value: production
-    - name: BODY_SIZE_LIMIT
-      value: 500mb
     - name: NEXT_SHARP_PATH
       value: /app/node_modules/sharp
+    
+    # Smart Temporary Files + 105MB Limit Configuration
+    - name: BODY_SIZE_LIMIT
+      value: 105mb
+    - name: MAX_FILE_SIZE_MB
+      value: 105
+    - name: TEMP_FILE_CLEANUP_ENABLED
+      value: true
+    - name: MEMORY_EFFICIENT_MODE
+      value: true
     
     # AWS service configuration
     - name: AWS_REGION
@@ -26,7 +35,7 @@ run:
     - name: FORCE_AWS_ENVIRONMENT
       value: true
     
-    # Audio conversion settings
+    # Enhanced audio conversion settings for Smart Temp Files
     - name: FFMPEG_PATH
       value: /usr/local/bin/ffmpeg
     - name: FFMPEG_THREADS
@@ -34,20 +43,49 @@ run:
     - name: FFMPEG_BUFFER_SIZE
       value: 64k
     - name: AUDIO_CONVERSION_TIMEOUT
+      value: 600
+    - name: TEMP_FILE_DIR
+      value: /tmp/audio-processing
+    
+    # Memory optimizations for 105MB file processing
+    - name: NODE_OPTIONS
+      value: --max-http-header-size=16384 --max-old-space-size=1024
+    
+    # Progress tracking optimizations
+    - name: PROGRESS_UPDATE_INTERVAL
+      value: 1500
+    - name: PROGRESS_CLEANUP_TTL
+      value: 3600
+    
+    # S3 streaming optimizations
+    - name: S3_MULTIPART_THRESHOLD
+      value: 10485760
+    - name: S3_CHUNK_SIZE
+      value: 10485760
+    - name: S3_UPLOAD_TIMEOUT
       value: 300
     
-    # Memory and performance optimizations
-    - name: NODE_OPTIONS
-      value: --max-http-header-size=16384 --max-old-space-size=2048
-  
-  # Production AWS service endpoints (configured as environment variables in App Runner console)
+    # DynamoDB optimizations
+    - name: DYNAMODB_MAX_RETRIES
+      value: 3
+    - name: DYNAMODB_RETRY_DELAY
+      value: 500
+    
+  # Production AWS service endpoints
   env:
     - name: S3_BUCKET_NAME
       value: audio-conversion-app-bucket
-    # Redis disabled for App Runner due to VPC connectivity issues
-    # - name: REDIS_ENDPOINT
-    #   value: master.audio-conversion-redis.u6km1j.use1.cache.amazonaws.com
-    # - name: REDIS_PORT
-    #   value: 6379
-    # - name: REDIS_TLS
-    #   value: true
+    
+    # DynamoDB tables for Smart Temporary Files implementation
+    - name: DYNAMODB_JOBS_TABLE
+      value: audio-conversion-jobs
+    - name: DYNAMODB_PROGRESS_TABLE
+      value: audio-conversion-progress
+    - name: DYNAMODB_UPLOADS_TABLE
+      value: audio-conversion-uploads
+    
+    # Health check configuration
+    - name: HEALTH_CHECK_ENABLED
+      value: true
+    - name: HEALTH_CHECK_TIMEOUT
+      value: 10000

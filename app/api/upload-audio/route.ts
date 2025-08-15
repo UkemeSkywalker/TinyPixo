@@ -43,8 +43,7 @@ interface S3Location {
   size: number
 }
 
-// In-memory storage for upload progress (fallback when DynamoDB is unavailable)
-const uploadProgress = new Map<string, UploadProgressData>()
+// Upload progress is stored in DynamoDB only - no in-memory fallbacks
 
 // Utility functions
 function generateFileId(): string {
@@ -167,8 +166,9 @@ async function storeUploadProgress(progress: UploadProgressData): Promise<void> 
     await dynamodbProgressService.setUploadProgress(progress.fileId, progress)
     console.log(`Upload progress stored in DynamoDB for ${progress.fileId}`)
   } catch (error) {
-    console.warn('Failed to store progress in DynamoDB, using in-memory fallback:', error)
-    uploadProgress.set(progress.fileId, progress)
+    console.error(`CRITICAL: Failed to store progress in DynamoDB for ${progress.fileId}:`, error)
+    // Don't use in-memory fallback - this indicates a real problem that needs to be fixed
+    throw new Error(`Upload progress storage failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
 }
 
@@ -176,13 +176,16 @@ async function getUploadProgress(fileId: string): Promise<UploadProgressData | n
   try {
     const progress = await dynamodbProgressService.getUploadProgress(fileId)
     if (progress) {
+      console.log(`Upload progress retrieved from DynamoDB for ${fileId}`)
       return progress
+    } else {
+      console.log(`Upload progress not found in DynamoDB for ${fileId}`)
+      return null
     }
   } catch (error) {
-    console.warn('Failed to get progress from DynamoDB, checking in-memory fallback:', error)
+    console.error(`Failed to get progress from DynamoDB for ${fileId}:`, error)
+    throw new Error(`Upload progress retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
   }
-
-  return uploadProgress.get(fileId) || null
 }
 
 async function deleteUploadProgress(fileId: string): Promise<void> {
@@ -195,10 +198,10 @@ async function deleteUploadProgress(fileId: string): Promise<void> {
     }
     console.log(`Upload progress marked as completed in DynamoDB for ${fileId}`)
   } catch (error) {
-    console.warn('Failed to update progress in DynamoDB:', error)
+    console.error('Failed to update progress in DynamoDB:', error)
+    // Don't silently ignore this - it indicates a real problem
+    throw error
   }
-
-  uploadProgress.delete(fileId)
 }
 
 export async function POST(request: NextRequest) {
