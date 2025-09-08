@@ -58,7 +58,7 @@ export default function ImageComparison({
               <img src={optimizedImage} className="max-w-full max-h-full object-contain" alt="Optimized" />
             ) : (
               <div className="flex flex-col items-center justify-center space-y-4 p-8">
-                {isProcessing && (
+                {isProcessing ? (
                   <>
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
                     <ProgressBar 
@@ -66,11 +66,15 @@ export default function ImageComparison({
                       isVisible={true} 
                       label={progressStatus}
                     />
+                    <div className="text-gray-500 text-center">{progressStatus}</div>
                   </>
+                ) : (
+                  <div className="text-center">
+                    <div className="text-4xl mb-3">⚙️</div>
+                    <div className="text-gray-400 mb-2">Ready to optimize</div>
+                    <div className="text-sm text-gray-500">Configure your settings and click "Optimize Image"</div>
+                  </div>
                 )}
-                <div className="text-gray-500 text-center">
-                  {isProcessing ? progressStatus : "Processing..."}
-                </div>
               </div>
             )}
           </div>
@@ -98,31 +102,33 @@ export default function ImageComparison({
         </div>
       )}
 
-      {/* Stats */}
-      <div className="mt-6 bg-gray-800 rounded-xl p-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          <div>
-            <div className="text-2xl font-bold text-red-400">{formatFileSize(originalSize)}</div>
-            <div className="text-sm text-gray-400">Original</div>
-          </div>
-          <div>
-            <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-green-400'}`}>
-              {formatFileSize(optimizedSize)}
+      {/* Stats - Only show when optimized */}
+      {optimizedImage && (
+        <div className="mt-6 bg-gray-800 rounded-xl p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div>
+              <div className="text-2xl font-bold text-red-400">{formatFileSize(originalSize)}</div>
+              <div className="text-sm text-gray-400">Original</div>
             </div>
-            <div className="text-sm text-gray-400">Compressed</div>
-          </div>
-          <div>
-            <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-blue-400'}`}>
-              {isLarger ? `+${increase}%` : `${savings}%`}
+            <div>
+              <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-green-400'}`}>
+                {formatFileSize(optimizedSize)}
+              </div>
+              <div className="text-sm text-gray-400">Compressed</div>
             </div>
-            <div className="text-sm text-gray-400">{isLarger ? 'Increased' : 'Saved'}</div>
-          </div>
-          <div>
-            <div className="text-2xl font-bold text-purple-400">{ratio}:1</div>
-            <div className="text-sm text-gray-400">Ratio</div>
+            <div>
+              <div className={`text-2xl font-bold ${isLarger ? 'text-yellow-400' : 'text-blue-400'}`}>
+                {isLarger ? `+${increase}%` : `${savings}%`}
+              </div>
+              <div className="text-sm text-gray-400">{isLarger ? 'Increased' : 'Saved'}</div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-purple-400">{ratio}:1</div>
+              <div className="text-sm text-gray-400">Ratio</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   )
 }
