@@ -190,7 +190,7 @@ export default function Home() {
     };
     img.src = url;
 
-    await processImage(processedFile);
+    // Remove automatic processing on upload
   };
 
   const handleBatchUpload = (files: File[]) => {
@@ -388,28 +388,13 @@ export default function Home() {
               width={width}
               height={height}
               maintainAspect={maintainAspect}
-              onFormatChange={(newFormat) => {
-
-                setFormat(newFormat);
-                setTimeout(() => processImage(), 100);
-              }}
-              onQualityChange={(newQuality) => {
-                setQuality(newQuality);
-                setTimeout(() => processImage(), 100);
-              }}
-              onWidthChange={(newWidth) => {
-                setWidth(newWidth);
-                setTimeout(() => processImage(), 100);
-              }}
-              onHeightChange={(newHeight) => {
-                setHeight(newHeight);
-                setTimeout(() => processImage(), 100);
-
-              }}
+              onFormatChange={setFormat}
+              onQualityChange={setQuality}
+              onWidthChange={setWidth}
+              onHeightChange={setHeight}
               onMaintainAspectChange={setMaintainAspect}
               onPercentageResize={(percentage) => {
                 if (originalDimensions) {
-
                   const newWidth = Math.round(
                     originalDimensions.width * (percentage / 100)
                   );
@@ -418,21 +403,27 @@ export default function Home() {
                   );
                   setWidth(newWidth);
                   setHeight(newHeight);
-                  setTimeout(() => processImage(), 100);
-
                 }
               }}
             />
 
-            {/* Download Button */}
-            <div className="mt-6 text-center">
+            {/* Action Buttons */}
+            <div className="mt-6 text-center space-x-4">
               <button
-                onClick={handleDownload}
-                disabled={!optimizedImage}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-8 py-3 rounded-lg font-medium transition-colors"
+                onClick={() => processImage()}
+                disabled={isProcessing}
+                className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-8 py-3 rounded-lg font-medium transition-colors"
               >
-                Download Optimized Image
+                {isProcessing ? 'Processing...' : 'Optimize Image'}
               </button>
+              {optimizedImage && (
+                <button
+                  onClick={handleDownload}
+                  className="bg-blue-600 hover:bg-blue-700 px-8 py-3 rounded-lg font-medium transition-colors"
+                >
+                  Download Optimized Image
+                </button>
+              )}
             </div>
           </>
         )}
