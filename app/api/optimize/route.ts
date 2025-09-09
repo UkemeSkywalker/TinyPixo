@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
       // Production optimizations
       pages: 1, // Only process first page for multi-page formats
       subifd: -1, // Disable SUBIFD processing for faster performance
-    })
+    }).rotate() // Apply EXIF orientation automatically
 
     // Get image metadata for validation
     const metadata = await sharpInstance.metadata()
