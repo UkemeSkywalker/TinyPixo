@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface BatchFile {
   file: File
@@ -30,13 +30,54 @@ export default function BatchProcessor({ files, format, quality, width, height, 
     }))
   )
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isCreatingZip, setIsCreatingZip] = useState(false)
+  const [zipProgress, setZipProgress] = useState(0)
+  const [zipWorker, setZipWorker] = useState<Worker | null>(null)
   const shouldStopRef = useRef(false)
+  const CHUNK_SIZE = 8
+  
+  useEffect(() => {
+    return () => {
+      if (zipWorker) {
+        zipWorker.terminate()
+      }
+    }
+  }, [zipWorker])
 
-  const processAllFiles = async () => {
+  const checkMemoryUsage = () => {
+    if ('memory' in performance) {
+      const memory = (performance as any).memory
+      const usageRatio = memory.usedJSHeapSize / memory.jsHeapSizeLimit
+      return usageRatio > 0.8
+    }
+    return false
+  }
+
+  const processInChunks = async () => {
     setIsProcessing(true)
     shouldStopRef.current = false
+    let chunkSize = CHUNK_SIZE
     
-    for (let i = 0; i < batchFiles.length; i++) {
+    for (let i = 0; i < batchFiles.length; i += chunkSize) {
+      if (shouldStopRef.current) break
+      
+      if (checkMemoryUsage()) {
+        chunkSize = Math.max(2, Math.floor(chunkSize / 2))
+        console.warn(`Reducing chunk size to ${chunkSize} due to memory pressure`)
+      }
+      
+      const chunk = batchFiles.slice(i, i + chunkSize)
+      await processChunk(chunk, i)
+      
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    
+    setIsProcessing(false)
+  }
+
+  const processChunk = async (chunk: BatchFile[], startIndex: number) => {
+    for (let j = 0; j < chunk.length; j++) {
+      const i = startIndex + j
       if (shouldStopRef.current) break
       
       setBatchFiles(prev => prev.map((bf, idx) => 
@@ -44,7 +85,6 @@ export default function BatchProcessor({ files, format, quality, width, height, 
       ))
 
       try {
-        // Check file size before processing
         if (batchFiles[i].file.size > 50 * 1024 * 1024) {
           setBatchFiles(prev => prev.map((bf, idx) => 
             idx === i ? { ...bf, status: 'error' } : bf
@@ -85,13 +125,83 @@ export default function BatchProcessor({ files, format, quality, width, height, 
         ))
       }
     }
-    
-    setIsProcessing(false)
   }
 
   const stopProcessing = () => {
     shouldStopRef.current = true
     setIsProcessing(false)
+    if (isCreatingZip && zipWorker) {
+      zipWorker.postMessage({ type: 'CANCEL' })
+      setIsCreatingZip(false)
+      setZipProgress(0)
+    }
+  }
+
+  const preserveFolderStructure = (file: File, format: string) => {
+    const relativePath = file.webkitRelativePath || file.name
+    const pathParts = relativePath.split('/')
+    const fileName = pathParts.pop()?.replace(/\.[^/.]+$/, '') + `.${format}`
+    return [...pathParts, fileName].join('/')
+  }
+
+  const createZipExport = async () => {
+    const completedFiles = batchFiles.filter(bf => bf.status === 'completed' && bf.optimizedBlob)
+    if (completedFiles.length === 0) return
+
+    setIsCreatingZip(true)
+    setZipProgress(0)
+
+    try {
+      const worker = new Worker('/workers/zipWorker.js')
+      setZipWorker(worker)
+
+      worker.onmessage = (e) => {
+        const { type, progress, zipBlob, error } = e.data
+        
+        switch (type) {
+          case 'PROGRESS':
+            setZipProgress(progress)
+            break
+          case 'COMPLETE':
+            const url = URL.createObjectURL(zipBlob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `optimized_images.zip`
+            link.click()
+            URL.revokeObjectURL(url)
+            setIsCreatingZip(false)
+            setZipProgress(0)
+            worker.terminate()
+            setZipWorker(null)
+            break
+          case 'ERROR':
+            console.error('ZIP creation failed:', error)
+            setIsCreatingZip(false)
+            setZipProgress(0)
+            worker.terminate()
+            setZipWorker(null)
+            downloadAll()
+            break
+        }
+      }
+
+      worker.postMessage({ type: 'INIT', data: { totalFiles: completedFiles.length } })
+
+      for (const bf of completedFiles) {
+        const path = preserveFolderStructure(bf.file, format)
+        worker.postMessage({ 
+          type: 'ADD_FILE', 
+          data: { blob: bf.optimizedBlob, path } 
+        })
+      }
+
+      worker.postMessage({ type: 'FINALIZE' })
+    } catch (error) {
+      console.error('Failed to create ZIP:', error)
+      setIsCreatingZip(false)
+      setZipProgress(0)
+      downloadAll()
+    }
   }
 
   const downloadAll = () => {
@@ -196,16 +306,16 @@ export default function BatchProcessor({ files, format, quality, width, height, 
       </div>
 
       {/* Controls */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         <button
-          onClick={processAllFiles}
-          disabled={isProcessing}
+          onClick={processInChunks}
+          disabled={isProcessing || isCreatingZip}
           className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-2 rounded-lg font-medium"
         >
           {isProcessing ? 'Processing...' : 'Start Processing'}
         </button>
         
-        {isProcessing && (
+        {(isProcessing || isCreatingZip) && (
           <button
             onClick={stopProcessing}
             className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-medium"
@@ -214,15 +324,41 @@ export default function BatchProcessor({ files, format, quality, width, height, 
           </button>
         )}
         
-        {completedFiles > 0 && (
-          <button
-            onClick={downloadAll}
-            className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-medium"
-          >
-            Download All ({completedFiles})
-          </button>
+        {completedFiles > 0 && !isProcessing && (
+          <>
+            <button
+              onClick={createZipExport}
+              disabled={isCreatingZip}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 px-6 py-2 rounded-lg font-medium"
+            >
+              {isCreatingZip ? `Creating ZIP... ${zipProgress}%` : `Export as ZIP (${completedFiles})`}
+            </button>
+            <button
+              onClick={downloadAll}
+              disabled={isCreatingZip}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 px-6 py-2 rounded-lg font-medium"
+            >
+              Download All ({completedFiles})
+            </button>
+          </>
         )}
       </div>
+      
+      {/* ZIP Progress */}
+      {isCreatingZip && (
+        <div className="bg-gray-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Creating ZIP archive...</span>
+            <span className="text-sm text-gray-400">{zipProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2">
+            <div 
+              className="bg-purple-600 h-2 rounded-full transition-all duration-300" 
+              style={{ width: `${zipProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       {completedFiles > 0 && (
@@ -241,6 +377,11 @@ export default function BatchProcessor({ files, format, quality, width, height, 
               <div className="text-sm text-gray-400">Total Files</div>
             </div>
           </div>
+          {files.length > 50 && (
+            <div className="mt-3 p-2 bg-yellow-900/30 border border-yellow-600 rounded text-yellow-400 text-xs text-center">
+              ⚠️ Large batch detected. ZIP creation may take longer.
+            </div>
+          )}
         </div>
       )}
 
@@ -255,7 +396,9 @@ export default function BatchProcessor({ files, format, quality, width, height, 
                   bf.status === 'processing' ? 'bg-yellow-500 animate-pulse' :
                   bf.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
                 }`} />
-                <span className="text-sm font-medium truncate max-w-xs">{bf.file.name}</span>
+                <span className="text-sm font-medium truncate max-w-xs" title={bf.file.webkitRelativePath || bf.file.name}>
+                  {bf.file.webkitRelativePath || bf.file.name}
+                </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-sm text-gray-400">
