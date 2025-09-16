@@ -148,21 +148,32 @@ export default function BatchProcessor({ files, format, quality, width, height, 
     const completedFiles = batchFiles.filter(bf => bf.status === 'completed' && bf.optimizedBlob)
     if (completedFiles.length === 0) return
 
+    console.log('Starting ZIP export for', completedFiles.length, 'files')
     setIsCreatingZip(true)
     setZipProgress(0)
 
     try {
+      console.log('Creating worker...')
       const worker = new Worker('/workers/zipWorker.js')
       setZipWorker(worker)
 
+      worker.onerror = (error) => {
+        console.error('Worker error:', error)
+        setIsCreatingZip(false)
+        setZipProgress(0)
+        downloadAll()
+      }
+
       worker.onmessage = (e) => {
         const { type, progress, zipBlob, error } = e.data
+        console.log('Received message from worker:', type, progress)
         
         switch (type) {
           case 'PROGRESS':
             setZipProgress(progress)
             break
           case 'COMPLETE':
+            console.log('ZIP creation complete, downloading...')
             const url = URL.createObjectURL(zipBlob)
             const link = document.createElement('a')
             link.href = url
@@ -185,8 +196,10 @@ export default function BatchProcessor({ files, format, quality, width, height, 
         }
       }
 
+      console.log('Sending INIT message...')
       worker.postMessage({ type: 'INIT', data: { totalFiles: completedFiles.length } })
 
+      console.log('Adding files to ZIP...')
       for (const bf of completedFiles) {
         const path = preserveFolderStructure(bf.file, format)
         worker.postMessage({ 
@@ -195,6 +208,7 @@ export default function BatchProcessor({ files, format, quality, width, height, 
         })
       }
 
+      console.log('Sending FINALIZE message...')
       worker.postMessage({ type: 'FINALIZE' })
     } catch (error) {
       console.error('Failed to create ZIP:', error)
