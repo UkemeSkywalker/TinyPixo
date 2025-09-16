@@ -150,7 +150,7 @@ export default function ImageUpload({ onImageUpload, onBatchUpload }: ImageUploa
           type="file" 
           className="hidden" 
           accept="image/*"
-          webkitdirectory=""
+          {...({ webkitdirectory: '' } as any)}
           multiple
           onChange={handleFileChange}
         />
