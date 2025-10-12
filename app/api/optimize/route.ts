@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
       // Production optimizations
       pages: 1, // Only process first page for multi-page formats
       subifd: -1, // Disable SUBIFD processing for faster performance
-    })
+    }).rotate() // Apply EXIF orientation automatically
 
     // Get image metadata for validation
     const metadata = await sharpInstance.metadata()
@@ -337,7 +337,7 @@ export async function POST(request: NextRequest) {
     const compressionRatio = ((1 - outputBuffer.length / originalSize) * 100).toFixed(1)
     console.log(`Compression successful: ${originalSize} -> ${outputBuffer.length} (${compressionRatio}% reduction)`)
 
-    return new NextResponse(outputBuffer, {
+    return new NextResponse(new Uint8Array(outputBuffer), {
       headers: {
         'Content-Type': `image/${bestFormat}`,
         'Content-Length': outputBuffer.length.toString(),
