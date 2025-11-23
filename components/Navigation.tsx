@@ -12,6 +12,7 @@ export default function Navigation() {
     { href: "/", label: "🖼️ Image Optimizer" },
     // { href: '/audio-converter', label: '🎵 Audio Converter' },
     // { href: '/video-converter', label: '🎬 Video Converter' },
+    { href: '/pdf-converter', label: '📄 PDF Compressor' },
   ];
 
   return (
