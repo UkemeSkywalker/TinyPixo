@@ -38,13 +38,18 @@ RUN apk add --no-cache \
     vips-cpp \
     glib \
     expat \
-    ffmpeg && \
+    ffmpeg \
+    ghostscript && \
     echo "FFmpeg installed at: $(which ffmpeg)" && \
+    echo "Ghostscript installed at: $(which gs)" && \
     ln -sf $(which ffmpeg) /usr/local/bin/ffmpeg && \
-    chmod +x /usr/local/bin/ffmpeg
+    ln -sf $(which gs) /usr/local/bin/gs && \
+    chmod +x /usr/local/bin/ffmpeg && \
+    chmod +x /usr/local/bin/gs
 
-# Set FFmpeg path as environment variable
+# Set FFmpeg and Ghostscript paths as environment variables
 ENV FFMPEG_PATH="/usr/local/bin/ffmpeg"
+ENV GHOSTSCRIPT_PATH="/usr/local/bin/gs"
 ENV PATH="/usr/local/bin:${PATH}"
 
 # Set Next.js server configuration
